@@ -189,9 +189,7 @@ def fetch_pcr(ticker_symbol, current_price):
     try:
         # Fetch Live OI from Angel
         payload = {
-            "exchangeTokens": {
-                "NFO": [ce_token, pe_token]
-            }
+            "NFO": [ce_token, pe_token]
         }
         data = session.getMarketData("FULL", payload)
         if data.get('status') and data.get('data') and data['data'].get('fetched'):
