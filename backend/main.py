@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from ai_engine import generate_signals
-from data_fetcher import fetch_market_data, fetch_pcr, get_angel_session, get_angel_tokens
+from data_fetcher import fetch_market_data, get_angel_session
 import json
 
 app = FastAPI(title="AI Trading API")
