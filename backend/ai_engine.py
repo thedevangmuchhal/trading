@@ -1,56 +1,56 @@
 import pandas as pd
-import pandas_ta as ta
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from data_fetcher import fetch_market_data, fetch_news
-import math
 
 analyzer = SentimentIntensityAnalyzer()
 
 def analyze_sentiment(headlines):
-    """
-    Analyzes a list of news headlines using VADER sentiment analysis.
-    Returns a score from -100 to +100.
-    """
     if not headlines:
         return 0
-
     total_compound = 0
     for title in headlines:
         score = analyzer.polarity_scores(title)
         total_compound += score['compound']
-    
     avg_compound = total_compound / len(headlines)
-    # Convert -1.0 to 1.0 range into -100 to 100
     return round(avg_compound * 100, 2)
 
+def calculate_rsi(data, window=14):
+    delta = data.diff()
+    up = delta.clip(lower=0)
+    down = -1 * delta.clip(upper=0)
+    ema_up = up.ewm(com=window-1, adjust=False).mean()
+    ema_down = down.ewm(com=window-1, adjust=False).mean()
+    rs = ema_up / ema_down
+    return 100 - (100 / (1 + rs))
+
+def calculate_atr(df, window=14):
+    high_low = df['High'] - df['Low']
+    high_close = (df['High'] - df['Close'].shift()).abs()
+    low_close = (df['Low'] - df['Close'].shift()).abs()
+    ranges = pd.concat([high_low, high_close, low_close], axis=1)
+    true_range = ranges.max(axis=1)
+    return true_range.rolling(window=window).mean()
+
 def analyze_technicals(df):
-    """
-    Calculates technical indicators on the dataframe.
-    Returns a dict with latest technical data.
-    """
     if df.empty:
         return {}
 
-    # Calculate indicators
-    df['EMA_20'] = ta.ema(df['Close'], length=20)
-    df['EMA_50'] = ta.ema(df['Close'], length=50)
-    df['ATR'] = ta.atr(df['High'], df['Low'], df['Close'], length=14)
-    df['RSI'] = ta.rsi(df['Close'], length=14)
+    # Calculate indicators using pure pandas
+    df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
+    df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
+    df['ATR'] = calculate_atr(df, 14)
+    df['RSI'] = calculate_rsi(df['Close'], 14)
 
     latest = df.iloc[-1]
-    prev = df.iloc[-2]
     
     current_price = latest['Close']
     
-    # Trend Bias
     trend = "Neutral"
     if latest['EMA_20'] > latest['EMA_50']:
         trend = "Bullish"
     elif latest['EMA_20'] < latest['EMA_50']:
         trend = "Bearish"
 
-    # Support / Resistance Pivots (Simple calculation)
-    # Let's use standard pivot points from the previous day/period
     high = df['High'].max()
     low = df['Low'].min()
     close = latest['Close']
@@ -69,9 +69,6 @@ def analyze_technicals(df):
     }
 
 def generate_signals(ticker="^NSEI"):
-    """
-    Master function to fetch data and generate Buy/Sell signals.
-    """
     df = fetch_market_data(ticker)
     headlines = fetch_news(ticker)
     
@@ -81,37 +78,31 @@ def generate_signals(ticker="^NSEI"):
     if not tech_data:
         return {"error": "Failed to fetch market data"}
 
-    # Calculate AI Confidence Score
-    confidence = 50 # Base
+    confidence = 50 
     
-    # Add sentiment
     if sentiment_score > 20: confidence += 15
     elif sentiment_score > 5: confidence += 5
     elif sentiment_score < -20: confidence -= 15
     elif sentiment_score < -5: confidence -= 5
 
-    # Add technicals
     if tech_data['trend'] == "Bullish": confidence += 20
     elif tech_data['trend'] == "Bearish": confidence -= 20
     
-    if tech_data['rsi'] < 40: confidence += 10 # Oversold, favor upside
-    elif tech_data['rsi'] > 60: confidence -= 10 # Overbought, favor downside
+    if tech_data['rsi'] < 40: confidence += 10 
+    elif tech_data['rsi'] > 60: confidence -= 10 
 
-    # Determine Signal
     action = "WAIT"
     strike_type = None
     if confidence >= 70:
         action = "BUY"
         strike_type = "CE"
     elif confidence <= 30:
-        action = "SELL" # For options, buy Put
+        action = "SELL" 
         strike_type = "PE"
 
-    # Determine Strike (Round to nearest 100 for NIFTY)
     current_price = tech_data['current_price']
     strike_price = round(current_price / 100) * 100
 
-    # Determine Entry, Stop, Target based on ATR
     atr = tech_data['atr']
     if action == "BUY":
         entry = current_price
