@@ -345,16 +345,45 @@ def generate_signals(ticker="^NSEI"):
         action = "SELL" 
         strike_type = "PE"
 
-    strike_price = round(current_price / 100) * 100
+    import math
+    atm_strike = round(current_price / 100) * 100
+    strike_price = atm_strike
+    
     atr = tech_data['atr']
+    
     if action == "BUY":
+        # Institutional Strike Logic: Buy In-The-Money (ITM) for higher Delta and safety
+        strike_price = math.floor(current_price / 100) * 100
         entry = current_price
-        stop_loss = entry - (atr * 1.5)
-        target = entry + (atr * 3.0)
+        
+        # Target Resistance (Highest Call OI)
+        if oi_metrics and oi_metrics.get('highest_ce_strike') > entry:
+            target = oi_metrics['highest_ce_strike']
+        else:
+            target = entry + (atr * 3.0)
+            
+        # Stop Loss Support (Highest Put OI)
+        if oi_metrics and oi_metrics.get('highest_pe_strike') > 0 and oi_metrics.get('highest_pe_strike') < entry:
+            stop_loss = max(oi_metrics['highest_pe_strike'], entry - (atr * 2.0)) # Don't let SL get too wide
+        else:
+            stop_loss = entry - (atr * 1.5)
+            
     elif action == "SELL":
+        # Institutional Strike Logic: Buy In-The-Money (ITM) for higher Delta and safety
+        strike_price = math.ceil(current_price / 100) * 100
         entry = current_price
-        stop_loss = entry + (atr * 1.5) 
-        target = entry - (atr * 3.0) 
+        
+        # Target Support (Highest Put OI)
+        if oi_metrics and oi_metrics.get('highest_pe_strike') > 0 and oi_metrics.get('highest_pe_strike') < entry:
+            target = oi_metrics['highest_pe_strike']
+        else:
+            target = entry - (atr * 3.0) 
+            
+        # Stop Loss Resistance (Highest Call OI)
+        if oi_metrics and oi_metrics.get('highest_ce_strike') > entry:
+            stop_loss = min(oi_metrics['highest_ce_strike'], entry + (atr * 2.0))
+        else:
+            stop_loss = entry + (atr * 1.5) 
     else:
         entry = stop_loss = target = 0
 
