@@ -1,4 +1,5 @@
 import pandas as pd
+import numpy as np
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 from data_fetcher import fetch_market_data, fetch_news
 
@@ -39,6 +40,33 @@ def calculate_macd(data):
     histogram = macd - signal_line
     return macd, signal_line, histogram
 
+def calculate_adx(df, window=14):
+    # Average Directional Index (ADX) to measure trend strength
+    high_diff = df['High'].diff()
+    low_diff = df['Low'].diff()
+    
+    pos_dm = np.where((high_diff > low_diff) & (high_diff > 0), high_diff, 0.0)
+    neg_dm = np.where((low_diff > high_diff) & (low_diff > 0), low_diff, 0.0)
+    
+    pos_dm = pd.Series(pos_dm, index=df.index).ewm(alpha=1/window, adjust=False).mean()
+    neg_dm = pd.Series(neg_dm, index=df.index).ewm(alpha=1/window, adjust=False).mean()
+    
+    tr = calculate_atr(df, window)
+    
+    pos_di = 100 * (pos_dm / tr)
+    neg_di = 100 * (neg_dm / tr)
+    
+    dx = 100 * (abs(pos_di - neg_di) / (pos_di + neg_di + 1e-10))
+    adx = dx.ewm(alpha=1/window, adjust=False).mean()
+    return adx
+
+def calculate_vwap(df):
+    if df['Volume'].sum() == 0:
+        return pd.Series(index=df.index, dtype=float) # No volume data
+    q = df['Volume']
+    p = (df['High'] + df['Low'] + df['Close']) / 3
+    return (p * q).cumsum() / q.cumsum()
+
 def analyze_technicals(df):
     if df.empty:
         return {}
@@ -52,6 +80,8 @@ def analyze_technicals(df):
     df['MACD'] = macd
     df['MACD_Signal'] = signal_line
     df['MACD_Hist'] = hist
+    df['ADX'] = calculate_adx(df, 14)
+    df['VWAP'] = calculate_vwap(df)
 
     latest = df.iloc[-1]
     current_price = latest['Close']
@@ -84,6 +114,8 @@ def analyze_technicals(df):
         "momentum": momentum,
         "rsi": round(latest['RSI'], 2) if not pd.isna(latest['RSI']) else 50,
         "atr": round(latest['ATR'], 2) if not pd.isna(latest['ATR']) else 10,
+        "adx": round(latest['ADX'], 2) if not pd.isna(latest['ADX']) else 0,
+        "vwap": round(latest['VWAP'], 2) if not pd.isna(latest['VWAP']) else None,
         "support": round(s1, 2),
         "resistance": round(r1, 2)
     }
@@ -116,9 +148,20 @@ def generate_signals(ticker="^NSEI"):
     elif tech_data['momentum'] == "Strong Bearish": confidence -= 15
     
     # 4. RSI Overbought/Oversold Reversals (Max +/- 10)
-    # We avoid buying at the absolute top, and avoid selling at the absolute bottom.
-    if tech_data['rsi'] < 35: confidence += 10 # Extremely oversold, likely to bounce
-    elif tech_data['rsi'] > 65: confidence -= 10 # Extremely overbought, likely to drop
+    if tech_data['rsi'] < 35: confidence += 10 
+    elif tech_data['rsi'] > 65: confidence -= 10 
+
+    # 5. VWAP Institutional Volume Filter (Max +/- 10)
+    if tech_data['vwap'] is not None and not np.isnan(tech_data['vwap']):
+        if tech_data['current_price'] > tech_data['vwap']: confidence += 10
+        else: confidence -= 10
+
+    # 6. ADX Choppy Market Filter (OVERRIDE)
+    # If ADX is below 20, the market is entirely sideways. Do not trade.
+    market_condition = "Trending"
+    if tech_data['adx'] < 20:
+        confidence -= 50 # Brutally penalize confidence
+        market_condition = "Choppy/Sideways"
 
     # Clamp confidence to 0-100
     confidence = max(0, min(100, confidence))
@@ -126,10 +169,10 @@ def generate_signals(ticker="^NSEI"):
     # Stricter Signal Generation for higher accuracy
     action = "WAIT"
     strike_type = None
-    if confidence >= 80: # Increased threshold for higher accuracy
+    if confidence >= 80: 
         action = "BUY"
         strike_type = "CE"
-    elif confidence <= 20: # Decreased threshold for higher accuracy
+    elif confidence <= 20: 
         action = "SELL" 
         strike_type = "PE"
 
@@ -143,8 +186,8 @@ def generate_signals(ticker="^NSEI"):
         target = entry + (atr * 3.0)
     elif action == "SELL":
         entry = current_price
-        stop_loss = entry + (atr * 1.5) # Above current price for puts
-        target = entry - (atr * 3.0) # Below current price for puts
+        stop_loss = entry + (atr * 1.5) 
+        target = entry - (atr * 3.0) 
     else:
         entry = stop_loss = target = 0
 
@@ -153,9 +196,9 @@ def generate_signals(ticker="^NSEI"):
         "ticker": ticker,
         "current_price": current_price,
         "sentiment_score": sentiment_score,
-        "tech_trend": f"{tech_data['trend']} ({tech_data['momentum']})",
+        "tech_trend": f"{tech_data['trend']} ({tech_data['momentum']}) [{market_condition}]",
         "rsi": tech_data['rsi'],
-        "confidence_score": confidence,
+        "confidence_score": int(confidence),
         "action": action,
         "strike_recommendation": f"{strike_price} {strike_type}" if strike_type else "None",
         "entry_level": round(entry, 2),
