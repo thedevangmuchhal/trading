@@ -315,12 +315,12 @@
                     <div id="trendVal" class="stat-value">--</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">RSI</div>
-                    <div id="rsiVal" class="stat-value">--</div>
+                    <div class="stat-label">Pattern</div>
+                    <div id="patternVal" class="stat-value">--</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">Expiry</div>
-                    <div id="expiryVal" class="stat-value">--</div>
+                    <div class="stat-label">Opt Vol (CE / PE)</div>
+                    <div id="volVal" class="stat-value" style="font-size: 0.8rem;">--</div>
                 </div>
             </div>
 
@@ -459,8 +459,24 @@
 
                 document.getElementById('sentimentVal').innerText = data.sentiment_score;
                 document.getElementById('trendVal').innerText = data.tech_trend;
-                document.getElementById('rsiVal').innerText = data.rsi || '--';
-                document.getElementById('expiryVal').innerText = oiData.expiry || '--';
+                
+                const patternElem = document.getElementById('patternVal');
+                patternElem.innerText = data.chart_pattern || 'None';
+                if (data.chart_pattern === 'Bullish Engulfing' || data.chart_pattern === 'Hammer') {
+                    patternElem.className = 'stat-value bullish';
+                } else if (data.chart_pattern === 'Bearish Engulfing') {
+                    patternElem.className = 'stat-value bearish';
+                } else {
+                    patternElem.className = 'stat-value';
+                }
+
+                if (oiData && oiData.total_ce_vol !== undefined) {
+                    const ceVol = (oiData.total_ce_vol / 1000000).toFixed(1) + 'M';
+                    const peVol = (oiData.total_pe_vol / 1000000).toFixed(1) + 'M';
+                    document.getElementById('volVal').innerText = `${ceVol} / ${peVol}`;
+                } else {
+                    document.getElementById('volVal').innerText = '--';
+                }
 
                 document.getElementById('timestamp').innerText = "Last Updated: " + new Date().toLocaleTimeString();
 
