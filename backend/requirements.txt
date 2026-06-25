@@ -11,3 +11,4 @@ requests
 websocket-client
 ijson
 vaderSentiment
+logzero
