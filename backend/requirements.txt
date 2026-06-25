@@ -6,9 +6,8 @@ scikit-learn
 numpy
 pyotp
 smartapi-python
-fastapi
-uvicorn
 python-dotenv
 requests
 websocket-client
 ijson
+vaderSentiment
