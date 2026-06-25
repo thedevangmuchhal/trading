@@ -4,6 +4,7 @@ import pandas as pd
 import pyotp
 import requests
 from SmartApi import SmartConnect
+import time
 
 # Setup custom session to bypass Yahoo Finance rate-limiting on Render
 session = requests.Session()
@@ -286,7 +287,7 @@ def fetch_advanced_oi(ticker_symbol, current_price):
             if attempt == max_retries - 1:
                 print(f"Error fetching Advanced Live OI from Angel after {max_retries} attempts: {e}")
                 return None
-            _time.sleep(1) # Wait 1 second before retrying
+            time.sleep(1) # Wait 1 second before retrying
             
     if not data:
         return None
