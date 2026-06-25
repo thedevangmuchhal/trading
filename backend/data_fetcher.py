@@ -73,27 +73,52 @@ def fetch_market_data(ticker_symbol="^NSEI", interval="15m", period="5d"):
 
 import time
 from datetime import datetime
+import ijson
+import urllib.request
+import tempfile
+import os
 
-# Global cache for the massive 30MB token map
-angel_token_map = None
+# Global cache for only the filtered NIFTY tokens (saves massive memory)
+angel_filtered_opts = None
 
 def get_angel_tokens(base_symbol, current_price):
     """
-    Downloads and caches Angel One's massive JSON token list.
-    Finds the exact CE and PE tokens for the nearest Expiry At-The-Money (ATM) strike.
+    Downloads Angel One's massive JSON but streams it to save memory (Render 512MB limit).
+    Filters only for NIFTY options and caches the small resulting list.
     """
-    global angel_token_map
-    if angel_token_map is None:
+    global angel_filtered_opts
+    
+    # Base symbol handling (Angel One uses "NIFTY", not "^NSEI")
+    angel_base_symbol = "NIFTY" if base_symbol == "^NSEI" else base_symbol
+
+    if angel_filtered_opts is None:
+        print("Streaming Angel One Scrip Master JSON to save memory...")
         try:
-            print("Downloading Angel One Scrip Master JSON (First time only)...")
-            res = requests.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", timeout=20)
-            angel_token_map = res.json()
+            url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
+            
+            # Download to a temporary file on disk rather than holding 35MB in RAM
+            temp_path = os.path.join(tempfile.gettempdir(), "angel_tokens.json")
+            if not os.path.exists(temp_path):
+                urllib.request.urlretrieve(url, temp_path)
+            
+            angel_filtered_opts = []
+            
+            # Stream parse using ijson
+            with open(temp_path, "rb") as f:
+                # The JSON is an array of objects
+                objects = ijson.items(f, "item")
+                for obj in objects:
+                    # Filter down instantly to only what we need
+                    if obj.get("name") == angel_base_symbol and obj.get("instrumenttype") in ["OPTIDX", "OPTSTK"]:
+                        angel_filtered_opts.append(obj)
+            
+            print(f"Successfully loaded {len(angel_filtered_opts)} options for {angel_base_symbol}")
+            
         except Exception as e:
-            print("Failed to download Angel tokens:", e)
+            print("Failed to download or parse Angel tokens:", e)
             return None, None
             
-    # Filter options for this symbol
-    opts = [x for x in angel_token_map if x.get("name") == base_symbol and x.get("instrumenttype") in ["OPTIDX", "OPTSTK"]]
+    opts = angel_filtered_opts
     if not opts:
         return None, None
         
