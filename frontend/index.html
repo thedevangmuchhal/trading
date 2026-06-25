@@ -249,10 +249,32 @@
 
     <script>
         const API_URL = "https://trading-98h5.onrender.com/api/signal?ticker=^NSEI";
+        let lastAction = "WAIT"; // Track previous action for notifications
+
+        // Request Notification Permission on Load
+        document.addEventListener('DOMContentLoaded', () => {
+            if ("Notification" in window) {
+                if (Notification.permission !== "granted" && Notification.permission !== "denied") {
+                    Notification.requestPermission();
+                }
+            }
+            fetchSignal(); // Initial fetch
+            // Auto refresh every 30 seconds (30000 ms)
+            setInterval(fetchSignal, 30000);
+        });
+
+        function triggerNotification(action, target) {
+            if ("Notification" in window && Notification.permission === "granted") {
+                const text = action === "BUY" ? `🚀 BUY SIGNAL TRIGGERED! Target: ${target}` : `🚨 SELL SIGNAL TRIGGERED! Target: ${target}`;
+                new Notification("AI Trading Dashboard", {
+                    body: text,
+                    icon: "https://cdn-icons-png.flaticon.com/512/2933/2933116.png"
+                });
+            }
+        }
 
         async function fetchSignal() {
             document.getElementById('loader').style.display = 'block';
-            document.getElementById('content').style.display = 'none';
 
             try {
                 const response = await fetch(API_URL);
@@ -285,9 +307,15 @@
                 });
 
                 document.getElementById('content').style.display = 'block';
+
+                // Check for Notifications
+                if (data.action !== "WAIT" && data.action !== lastAction) {
+                    triggerNotification(data.action, data.target);
+                }
+                lastAction = data.action;
+
             } catch (error) {
-                alert("Failed to connect to the AI Backend. Is the server running?");
-                console.error(error);
+                console.error("Failed to connect to the AI Backend.", error);
             } finally {
                 document.getElementById('loader').style.display = 'none';
             }
