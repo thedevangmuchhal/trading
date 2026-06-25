@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Trading Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-bg: #1e293b;
+            --text-main: #f8fafc;
+            --text-muted: #94a3b8;
+            --green: #10b981;
+            --red: #ef4444;
+            --accent: #3b82f6;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            margin: 0;
+            padding: 2rem;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        .dashboard {
+            background-color: var(--panel-bg);
+            border-radius: 20px;
+            padding: 3rem;
+            width: 100%;
+            max-width: 600px;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+
+        .header {
+            margin-bottom: 2rem;
+        }
+
+        .header h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+
+        .signal-box {
+            padding: 2rem;
+            border-radius: 15px;
+            margin-bottom: 2rem;
+            transition: all 0.3s ease;
+            border: 2px solid transparent;
+        }
+
+        .signal-box.buy {
+            background-color: rgba(16, 185, 129, 0.1);
+            border-color: var(--green);
+            box-shadow: 0 0 30px rgba(16, 185, 129, 0.2);
+        }
+
+        .signal-box.sell {
+            background-color: rgba(239, 68, 68, 0.1);
+            border-color: var(--red);
+            box-shadow: 0 0 30px rgba(239, 68, 68, 0.2);
+        }
+
+        .signal-box.wait {
+            background-color: rgba(148, 163, 184, 0.1);
+            border-color: var(--text-muted);
+        }
+
+        .action-text {
+            font-size: 4rem;
+            font-weight: 800;
+            margin: 0;
+            line-height: 1;
+        }
+
+        .buy .action-text { color: var(--green); }
+        .sell .action-text { color: var(--red); }
+        .wait .action-text { color: var(--text-muted); }
+
+        .strike-text {
+            font-size: 1.5rem;
+            margin-top: 1rem;
+            font-weight: 600;
+            color: var(--text-main);
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .stat-card {
+            background-color: rgba(0,0,0,0.2);
+            padding: 1.5rem;
+            border-radius: 10px;
+        }
+
+        .stat-label {
+            font-size: 0.875rem;
+            color: var(--text-muted);
+            margin-bottom: 0.5rem;
+            text-transform: uppercase;
+        }
+
+        .stat-value {
+            font-size: 1.25rem;
+            font-weight: bold;
+        }
+
+        .levels {
+            display: flex;
+            justify-content: space-between;
+            background-color: rgba(0,0,0,0.2);
+            padding: 1rem 2rem;
+            border-radius: 10px;
+            margin-bottom: 2rem;
+        }
+
+        .level {
+            text-align: center;
+        }
+
+        .level-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .level-val {
+            font-size: 1rem;
+            font-weight: bold;
+            margin-top: 0.25rem;
+        }
+
+        .refresh-btn {
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            padding: 1rem 2rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+            width: 100%;
+        }
+
+        .refresh-btn:hover {
+            background-color: #2563eb;
+        }
+
+        .loader {
+            display: none;
+            margin: 2rem auto;
+            border: 4px solid rgba(255,255,255,0.1);
+            border-top: 4px solid var(--accent);
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        .news-ticker {
+            margin-top: 2rem;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            text-align: left;
+            background: rgba(0,0,0,0.2);
+            padding: 1rem;
+            border-radius: 8px;
+        }
+
+        .news-ticker p {
+            margin: 0.25rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.05);
+            padding-bottom: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="dashboard">
+        <div class="header">
+            <h1>AI Trading Dashboard</h1>
+            <p id="timestamp" style="font-size:0.8rem; color:var(--text-muted);">Last Updated: --</p>
+        </div>
+
+        <div class="loader" id="loader"></div>
+
+        <div id="content" style="display:none;">
+            <div id="signalBox" class="signal-box wait">
+                <h2 id="actionText" class="action-text">WAIT</h2>
+                <div id="strikeText" class="strike-text">No clear signal</div>
+            </div>
+
+            <div class="levels">
+                <div class="level">
+                    <div class="level-label">ENTRY</div>
+                    <div id="entryVal" class="level-val">--</div>
+                </div>
+                <div class="level">
+                    <div class="level-label">TARGET</div>
+                    <div id="targetVal" class="level-val" style="color:var(--green)">--</div>
+                </div>
+                <div class="level">
+                    <div class="level-label">STOP LOSS</div>
+                    <div id="stopVal" class="level-val" style="color:var(--red)">--</div>
+                </div>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card">
+                    <div class="stat-label">AI Confidence</div>
+                    <div id="confidenceVal" class="stat-value">-- / 100</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">News Sentiment</div>
+                    <div id="sentimentVal" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Tech Trend</div>
+                    <div id="trendVal" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Current Price</div>
+                    <div id="priceVal" class="stat-value">--</div>
+                </div>
+            </div>
+
+            <div class="news-ticker" id="newsTicker">
+                <strong>Latest AI Processed News:</strong>
+                <div id="newsItems"></div>
+            </div>
+        </div>
+
+        <button class="refresh-btn" onclick="fetchSignal()">Scan Market Now</button>
+    </div>
+
+    <script>
+        const API_URL = "http://127.0.0.1:8000/api/signal?ticker=^NSEI";
+
+        async function fetchSignal() {
+            document.getElementById('loader').style.display = 'block';
+            document.getElementById('content').style.display = 'none';
+
+            try {
+                const response = await fetch(API_URL);
+                const data = await response.json();
+                
+                // Update UI
+                const signalBox = document.getElementById('signalBox');
+                signalBox.className = 'signal-box ' + data.action.toLowerCase();
+                
+                document.getElementById('actionText').innerText = data.action;
+                document.getElementById('strikeText').innerText = data.action === 'WAIT' ? 'No Trade Recommended' : data.strike_recommendation;
+                
+                document.getElementById('entryVal').innerText = data.entry_level > 0 ? data.entry_level : '--';
+                document.getElementById('targetVal').innerText = data.target > 0 ? data.target : '--';
+                document.getElementById('stopVal').innerText = data.stop_loss > 0 ? data.stop_loss : '--';
+
+                document.getElementById('confidenceVal').innerText = data.confidence_score + ' / 100';
+                document.getElementById('sentimentVal').innerText = data.sentiment_score;
+                document.getElementById('trendVal').innerText = data.tech_trend;
+                document.getElementById('priceVal').innerText = data.current_price;
+
+                document.getElementById('timestamp').innerText = "Last Updated: " + new Date().toLocaleTimeString();
+
+                const newsItems = document.getElementById('newsItems');
+                newsItems.innerHTML = '';
+                data.recent_headlines.forEach(headline => {
+                    const p = document.createElement('p');
+                    p.innerText = "• " + headline;
+                    newsItems.appendChild(p);
+                });
+
+                document.getElementById('content').style.display = 'block';
+            } catch (error) {
+                alert("Failed to connect to the AI Backend. Is the server running?");
+                console.error(error);
+            } finally {
+                document.getElementById('loader').style.display = 'none';
+            }
+        }
+    </script>
+</body>
+</html>
