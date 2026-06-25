@@ -31,23 +31,44 @@ def calculate_atr(df, window=14):
     true_range = ranges.max(axis=1)
     return true_range.rolling(window=window).mean()
 
+def calculate_macd(data):
+    ema12 = data.ewm(span=12, adjust=False).mean()
+    ema26 = data.ewm(span=26, adjust=False).mean()
+    macd = ema12 - ema26
+    signal_line = macd.ewm(span=9, adjust=False).mean()
+    histogram = macd - signal_line
+    return macd, signal_line, histogram
+
 def analyze_technicals(df):
     if df.empty:
         return {}
 
+    # Calculate indicators using pure pandas
     df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['ATR'] = calculate_atr(df, 14)
     df['RSI'] = calculate_rsi(df['Close'], 14)
+    macd, signal_line, hist = calculate_macd(df['Close'])
+    df['MACD'] = macd
+    df['MACD_Signal'] = signal_line
+    df['MACD_Hist'] = hist
 
     latest = df.iloc[-1]
     current_price = latest['Close']
     
+    # Advanced Trend Detection
     trend = "Neutral"
     if latest['EMA_20'] > latest['EMA_50']:
         trend = "Bullish"
     elif latest['EMA_20'] < latest['EMA_50']:
         trend = "Bearish"
+
+    # MACD Momentum
+    momentum = "Neutral"
+    if latest['MACD_Hist'] > 0 and latest['MACD'] > latest['MACD_Signal']:
+        momentum = "Strong Bullish"
+    elif latest['MACD_Hist'] < 0 and latest['MACD'] < latest['MACD_Signal']:
+        momentum = "Strong Bearish"
 
     high = df['High'].max()
     low = df['Low'].min()
@@ -60,6 +81,7 @@ def analyze_technicals(df):
     return {
         "current_price": round(current_price, 2),
         "trend": trend,
+        "momentum": momentum,
         "rsi": round(latest['RSI'], 2) if not pd.isna(latest['RSI']) else 50,
         "atr": round(latest['ATR'], 2) if not pd.isna(latest['ATR']) else 10,
         "support": round(s1, 2),
@@ -76,25 +98,38 @@ def generate_signals(ticker="^NSEI"):
     if not tech_data:
         return {"error": "Failed to fetch market data"}
 
+    # Base Confidence
     confidence = 50 
     
+    # 1. Sentiment Weight (Max +/- 15)
     if sentiment_score > 20: confidence += 15
     elif sentiment_score > 5: confidence += 5
     elif sentiment_score < -20: confidence -= 15
     elif sentiment_score < -5: confidence -= 5
 
+    # 2. Trend Weight (Max +/- 20)
     if tech_data['trend'] == "Bullish": confidence += 20
     elif tech_data['trend'] == "Bearish": confidence -= 20
-    
-    if tech_data['rsi'] < 40: confidence += 10 
-    elif tech_data['rsi'] > 60: confidence -= 10 
 
+    # 3. MACD Momentum Weight (Max +/- 15) - Adds accuracy
+    if tech_data['momentum'] == "Strong Bullish": confidence += 15
+    elif tech_data['momentum'] == "Strong Bearish": confidence -= 15
+    
+    # 4. RSI Overbought/Oversold Reversals (Max +/- 10)
+    # We avoid buying at the absolute top, and avoid selling at the absolute bottom.
+    if tech_data['rsi'] < 35: confidence += 10 # Extremely oversold, likely to bounce
+    elif tech_data['rsi'] > 65: confidence -= 10 # Extremely overbought, likely to drop
+
+    # Clamp confidence to 0-100
+    confidence = max(0, min(100, confidence))
+
+    # Stricter Signal Generation for higher accuracy
     action = "WAIT"
     strike_type = None
-    if confidence >= 70:
+    if confidence >= 80: # Increased threshold for higher accuracy
         action = "BUY"
         strike_type = "CE"
-    elif confidence <= 30:
+    elif confidence <= 20: # Decreased threshold for higher accuracy
         action = "SELL" 
         strike_type = "PE"
 
@@ -108,8 +143,8 @@ def generate_signals(ticker="^NSEI"):
         target = entry + (atr * 3.0)
     elif action == "SELL":
         entry = current_price
-        stop_loss = entry + (atr * 1.5)
-        target = entry - (atr * 3.0)
+        stop_loss = entry + (atr * 1.5) # Above current price for puts
+        target = entry - (atr * 3.0) # Below current price for puts
     else:
         entry = stop_loss = target = 0
 
@@ -118,7 +153,7 @@ def generate_signals(ticker="^NSEI"):
         "ticker": ticker,
         "current_price": current_price,
         "sentiment_score": sentiment_score,
-        "tech_trend": tech_data['trend'],
+        "tech_trend": f"{tech_data['trend']} ({tech_data['momentum']})",
         "rsi": tech_data['rsi'],
         "confidence_score": confidence,
         "action": action,
@@ -130,3 +165,7 @@ def generate_signals(ticker="^NSEI"):
         "resistance": tech_data['resistance'],
         "recent_headlines": headlines[:3]
     }
+
+if __name__ == "__main__":
+    import json
+    print(json.dumps(generate_signals(), indent=2))
