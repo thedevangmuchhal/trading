@@ -121,6 +121,8 @@ def analyze_technicals(df):
     }
 
 def generate_signals(ticker="^NSEI"):
+    from data_fetcher import fetch_pcr
+    
     df = fetch_market_data(ticker)
     headlines = fetch_news(ticker)
     
@@ -129,6 +131,11 @@ def generate_signals(ticker="^NSEI"):
     
     if not tech_data:
         return {"error": "Failed to fetch market data"}
+
+    current_price = tech_data['current_price']
+    
+    # Fetch Live Options Data (Put-Call Ratio) from Angel One API
+    pcr = fetch_pcr(ticker, current_price)
 
     # Base Confidence
     confidence = 50 
@@ -143,7 +150,7 @@ def generate_signals(ticker="^NSEI"):
     if tech_data['trend'] == "Bullish": confidence += 20
     elif tech_data['trend'] == "Bearish": confidence -= 20
 
-    # 3. MACD Momentum Weight (Max +/- 15) - Adds accuracy
+    # 3. MACD Momentum Weight (Max +/- 15)
     if tech_data['momentum'] == "Strong Bullish": confidence += 15
     elif tech_data['momentum'] == "Strong Bearish": confidence -= 15
     
@@ -156,11 +163,19 @@ def generate_signals(ticker="^NSEI"):
         if tech_data['current_price'] > tech_data['vwap']: confidence += 10
         else: confidence -= 10
 
-    # 6. ADX Choppy Market Filter (OVERRIDE)
-    # If ADX is below 20, the market is entirely sideways. Do not trade.
+    # 6. Options OI Put-Call Ratio (Max +/- 15)
+    # PCR > 1.0 means Put writers are dominating (Strong support, highly bullish)
+    # PCR < 0.8 means Call writers are dominating (Strong resistance, highly bearish)
+    if pcr is not None:
+        if pcr > 1.2: confidence += 15
+        elif pcr > 1.0: confidence += 10
+        elif pcr < 0.6: confidence -= 15
+        elif pcr < 0.8: confidence -= 10
+
+    # 7. ADX Choppy Market Filter (OVERRIDE)
     market_condition = "Trending"
     if tech_data['adx'] < 20:
-        confidence -= 50 # Brutally penalize confidence
+        confidence -= 50 
         market_condition = "Choppy/Sideways"
 
     # Clamp confidence to 0-100
@@ -176,9 +191,7 @@ def generate_signals(ticker="^NSEI"):
         action = "SELL" 
         strike_type = "PE"
 
-    current_price = tech_data['current_price']
     strike_price = round(current_price / 100) * 100
-
     atr = tech_data['atr']
     if action == "BUY":
         entry = current_price
@@ -198,6 +211,7 @@ def generate_signals(ticker="^NSEI"):
         "sentiment_score": sentiment_score,
         "tech_trend": f"{tech_data['trend']} ({tech_data['momentum']}) [{market_condition}]",
         "rsi": tech_data['rsi'],
+        "pcr": pcr,
         "confidence_score": int(confidence),
         "action": action,
         "strike_recommendation": f"{strike_price} {strike_type}" if strike_type else "None",
