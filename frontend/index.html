@@ -346,7 +346,7 @@
             }
             initPriceChart();
             analyzeSymbol();
-            setInterval(analyzeSymbol, 30000);
+            setInterval(analyzeSymbol, 60000); // Auto refresh every 60s to avoid rate limits
         });
 
         function initPriceChart() {
