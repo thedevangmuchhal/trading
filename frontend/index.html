@@ -599,7 +599,7 @@
             } catch (error) {
                 console.error("API Error:", error);
                 status.className = 'connection-status disconnected';
-                status.innerHTML = '🔴 AI Engine offline (Render cold-starting... wait 30s)';
+                status.innerHTML = '🔴 Engine offline (Render cold-starting... wait 30s)';
             } finally {
                 document.getElementById('loader').style.display = 'none';
             }
