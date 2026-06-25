@@ -38,23 +38,37 @@ def get_angel_session():
         print(f"Angel Login Failed: {e}")
     return None
 
+import time as _time
+
+# Smart cache: stores {ticker: {data: df, timestamp: epoch}}
+_market_cache = {}
+_CACHE_TTL = 60  # seconds
+
 def fetch_market_data(ticker_symbol="^NSEI", interval="15m", period="5d"):
     """
-    Fetches candlestick data for the given ticker.
-    Uses yfinance for broad market compatibility and historical data processing.
+    Fetches candlestick data with a 60-second cache to avoid Yahoo rate-limiting.
     """
+    cache_key = f"{ticker_symbol}_{interval}_{period}"
+    now = _time.time()
+    
+    if cache_key in _market_cache:
+        cached = _market_cache[cache_key]
+        if now - cached["ts"] < _CACHE_TTL:
+            return cached["data"]
+    
     try:
-        # We initialize Angel session in the background for future Options/Tick data extensions
-        angel_session = get_angel_session()
-
         ticker = yf.Ticker(ticker_symbol, session=session)
         df = ticker.history(period=period, interval=interval)
         if df.empty:
             ticker = yf.Ticker("SPY", session=session)
             df = ticker.history(period=period, interval=interval)
+        _market_cache[cache_key] = {"data": df, "ts": now}
         return df
     except Exception as e:
         print(f"Error fetching data: {e}")
+        # Return stale cache if available
+        if cache_key in _market_cache:
+            return _market_cache[cache_key]["data"]
         return pd.DataFrame()
 
 import time
