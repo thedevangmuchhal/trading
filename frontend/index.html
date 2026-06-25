@@ -303,7 +303,7 @@
                     <div id="confidenceVal" class="stat-value">--</div>
                 </div>
                 <div class="stat-card">
-                    <div class="stat-label">PCR (OI)</div>
+                    <div class="stat-label">PCR (OI / Vol)</div>
                     <div id="pcrVal" class="stat-value">--</div>
                 </div>
                 <div class="stat-card">
@@ -449,13 +449,20 @@
                 document.getElementById('confidenceVal').innerText = data.confidence_score + ' / 100';
                 
                 const pcrElem = document.getElementById('pcrVal');
+                let pcrText = '-- / --';
+                let pcrClass = '';
+                
                 if (data.pcr !== null && data.pcr !== undefined) {
-                    pcrElem.innerText = data.pcr;
-                    pcrElem.className = 'stat-value ' + (data.pcr > 1 ? 'bullish' : (data.pcr < 0.8 ? 'bearish' : ''));
-                } else {
-                    pcrElem.innerText = 'N/A';
-                    pcrElem.className = 'stat-value';
+                    const oiPcr = data.pcr;
+                    const volPcr = data.vpcr !== null && data.vpcr !== undefined ? data.vpcr : '--';
+                    pcrText = `${oiPcr} / ${volPcr}`;
+                    
+                    if (oiPcr > 1.2 || volPcr > 1.2) pcrClass = 'bullish';
+                    else if (oiPcr < 0.8 || volPcr < 0.8) pcrClass = 'bearish';
                 }
+                
+                pcrElem.innerText = pcrText;
+                pcrElem.className = 'stat-value ' + pcrClass;
 
                 document.getElementById('sentimentVal').innerText = data.sentiment_score;
                 document.getElementById('trendVal').innerText = data.tech_trend;
