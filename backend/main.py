@@ -116,7 +116,7 @@ def get_oi(ticker: str = "^NSEI"):
         return {"oi_data": [], "pcr": None}
     
     try:
-        payload = {"exchangeTokens": {"NFO": tokens_to_fetch}}
+        payload = {"NFO": tokens_to_fetch}
         data = angel.getMarketData("FULL", payload)
         
         oi_data = {}
