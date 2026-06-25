@@ -72,19 +72,10 @@ def get_oi(ticker: str = "^NSEI"):
         return {"oi_data": [], "pcr": None}
     current_price = float(df["Close"].iloc[-1])
     
-    # Download token map
-    from data_fetcher import angel_token_map
-    global angel_token_map_local
-    try:
-        angel_token_map_local = angel_token_map
-        if angel_token_map_local is None:
-            res = req.get("https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json", timeout=20)
-            angel_token_map_local = res.json()
-    except:
-        return {"oi_data": [], "pcr": None}
+    # Get options from the memory-efficient streaming parser
+    from data_fetcher import get_filtered_angel_options
+    opts = get_filtered_angel_options(base_symbol)
     
-    # Filter options
-    opts = [x for x in angel_token_map_local if x.get("name") == base_symbol and x.get("instrumenttype") in ["OPTIDX", "OPTSTK"]]
     if not opts:
         return {"oi_data": [], "pcr": None}
     
