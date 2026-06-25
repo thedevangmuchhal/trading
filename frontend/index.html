@@ -452,6 +452,14 @@
                 ]);
 
                 const data = await signalRes.json();
+                
+                if (data.error) {
+                    status.className = 'connection-status disconnected';
+                    status.innerHTML = '⚠️ Yahoo Finance Rate Limit: Market Data Unavailable. Retrying...';
+                    document.getElementById('loader').style.display = 'none';
+                    return;
+                }
+
                 const candleData = await candleRes.json();
                 const oiData = oiRes ? await oiRes.json() : { oi_data: [], pcr: null };
 
