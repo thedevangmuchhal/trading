@@ -54,6 +54,20 @@ import time as _time
 _market_cache = {}
 _CACHE_TTL = 60  # seconds
 
+def calculate_vpvr(df):
+    """Calculates the Volume Profile Point of Control (POC)"""
+    if df.empty or 'Volume' not in df.columns:
+        return None
+    try:
+        # Create price bins (50 bins)
+        bins = pd.cut(df['Close'], bins=50)
+        vol_profile = df.groupby(bins)['Volume'].sum()
+        poc_bin = vol_profile.idxmax()
+        return poc_bin.mid
+    except Exception as e:
+        print(f"VPVR error: {e}")
+        return None
+
 def fetch_market_data(ticker_symbol="^NSEI", interval="15m", period="5d"):
     """
     Fetches candlestick data with a 60-second cache to avoid Yahoo rate-limiting.
@@ -72,14 +86,28 @@ def fetch_market_data(ticker_symbol="^NSEI", interval="15m", period="5d"):
         if df.empty:
             ticker = yf.Ticker("SPY", session=session)
             df = ticker.history(period=period, interval=interval)
+            
         _market_cache[cache_key] = {"data": df, "ts": now}
         return df
     except Exception as e:
         print(f"Error fetching data: {e}")
-        # Return stale cache if available
         if cache_key in _market_cache:
             return _market_cache[cache_key]["data"]
         return pd.DataFrame()
+
+def fetch_vix():
+    """Fetches live India VIX data to detect Theta traps."""
+    try:
+        vix = yf.Ticker("^INDIAVIX", session=session)
+        df = vix.history(period="1d", interval="1d")
+        if not df.empty:
+            close = df['Close'].iloc[-1]
+            open_p = df['Open'].iloc[-1]
+            pct_change = ((close - open_p) / open_p) * 100
+            return {"current": close, "pct_change": pct_change}
+    except Exception as e:
+        print(f"Error fetching VIX: {e}")
+    return {"current": 15.0, "pct_change": 0.0}
 
 import time
 from datetime import datetime

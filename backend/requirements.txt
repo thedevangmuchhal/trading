@@ -12,3 +12,6 @@ websocket-client
 ijson
 vaderSentiment
 logzero
+
+scikit-learn
+joblib

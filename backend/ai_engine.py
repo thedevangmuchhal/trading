@@ -160,21 +160,34 @@ def analyze_technicals(df):
     }
 
 def generate_signals(ticker="^NSEI"):
-    from data_fetcher import fetch_advanced_oi, fetch_fii_dii
+    from data_fetcher import fetch_advanced_oi, fetch_fii_dii, fetch_market_data, fetch_news, fetch_vix, calculate_vpvr
+    from ml_engine import predict_breakout_probability
     
-    df = fetch_market_data(ticker)
+    # 1. Multi-Timeframe (MTF) Data Fetching
+    df_15m = fetch_market_data(ticker, interval="15m")
+    df_1h = fetch_market_data(ticker, interval="1h")
+    
     headlines = fetch_news(ticker)
-    
     sentiment_score = analyze_sentiment(headlines)
-    tech_data = analyze_technicals(df)
     
+    tech_data = analyze_technicals(df_15m)
     if not tech_data:
         return {"error": "Failed to fetch market data"}
+        
+    # Calculate POC (Volume Profile)
+    poc = calculate_vpvr(df_15m)
+    
+    # Check 1H Macro Trend
+    macro_tech = analyze_technicals(df_1h) if not df_1h.empty else tech_data
+    macro_trend = macro_tech.get('trend', 'Neutral')
 
     current_price = tech_data['current_price']
     
     # Fetch Advanced Options Data from Angel One API
     oi_metrics = fetch_advanced_oi(ticker, current_price)
+    
+    # Fetch VIX Data
+    vix_data = fetch_vix()
 
     # Base Confidence
     confidence = 50 
@@ -210,6 +223,24 @@ def generate_signals(ticker="^NSEI"):
             confidence += 10  # Massive FII solo buying
         elif fii_net < -5000:
             confidence -= 10  # Massive FII solo selling
+            
+    # ML Engine Probability
+    ml_prob = predict_breakout_probability(tech_data)
+    if ml_prob is not None:
+        if ml_prob > 0.75: confidence += 15
+        elif ml_prob > 0.60: confidence += 5
+        elif ml_prob < 0.25: confidence -= 15
+        elif ml_prob < 0.40: confidence -= 5
+    
+    # MTF Confluence Check
+    if tech_data['trend'] == "Bullish" and macro_trend == "Bearish":
+        confidence -= 20 # Bull Trap Detected
+    elif tech_data['trend'] == "Bearish" and macro_trend == "Bullish":
+        confidence += 20 # Bear Trap Detected / Dip Buying
+        
+    # VIX Theta Trap Check
+    if vix_data['pct_change'] < -3.0:
+        confidence -= 20 # VIX Crashing, Option Premium Melting
     
     # 1. Sentiment Weight (Max +/- 10)
     if sentiment_score > 20: confidence += 10
@@ -229,10 +260,13 @@ def generate_signals(ticker="^NSEI"):
     if tech_data['bb_lower'] and current_price < tech_data['bb_lower']: confidence += 10 # Oversold, buy
     if tech_data['bb_upper'] and current_price > tech_data['bb_upper']: confidence -= 10 # Overbought, sell
 
-    # 5. VWAP Institutional Volume Filter (Max +/- 10)
+    # 5. VPVR & VWAP Institutional Volume Filter (Max +/- 10)
+    if poc is not None:
+        if current_price > poc: confidence += 5
+        else: confidence -= 5
     if tech_data['vwap'] is not None and not np.isnan(tech_data['vwap']):
-        if tech_data['current_price'] > tech_data['vwap']: confidence += 10
-        else: confidence -= 10
+        if current_price > tech_data['vwap']: confidence += 5
+        else: confidence -= 5
 
     # 6. Chart Patterns (Max +/- 15)
     if tech_data['chart_pattern'] == "Bullish Engulfing": confidence += 15
