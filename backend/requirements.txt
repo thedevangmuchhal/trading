@@ -1,6 +1,5 @@
 fastapi
 uvicorn
-pandas
 yfinance
 vaderSentiment
 requests
