@@ -197,8 +197,9 @@ def fetch_pcr(ticker_symbol, current_price):
             ce_oi = 0
             pe_oi = 0
             for item in fetched:
-                if item['exchangeToken'] == ce_token: ce_oi = item['opnInterest']
-                if item['exchangeToken'] == pe_token: pe_oi = item['opnInterest']
+                token = item.get('exchangeToken') or str(item.get('symbolToken', ''))
+                if token == ce_token: ce_oi = item.get('opnInterest', 0)
+                if token == pe_token: pe_oi = item.get('opnInterest', 0)
                 
             if ce_oi > 0:
                 return round(pe_oi / ce_oi, 2)
