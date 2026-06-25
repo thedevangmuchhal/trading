@@ -2,9 +2,13 @@ fastapi
 uvicorn
 pandas
 yfinance
-vaderSentiment
-requests
-smartapi-python
+scikit-learn
+numpy
 pyotp
-logzero
+smartapi-python
+fastapi
+uvicorn
+python-dotenv
+requests
 websocket-client
+ijson
