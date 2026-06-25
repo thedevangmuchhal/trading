@@ -246,8 +246,14 @@ def fetch_advanced_oi(ticker_symbol, current_price):
             oi_data = {}
             total_ce_oi = 0
             total_pe_oi = 0
+            total_ce_vol = 0
+            total_pe_vol = 0
             highest_ce_oi = {"strike": 0, "oi": 0}
             highest_pe_oi = {"strike": 0, "oi": 0}
+            atm_ce_ltp = 0
+            atm_ce_vwap = 0
+            atm_pe_ltp = 0
+            atm_pe_vwap = 0
             
             for item in fetched:
                 token = item.get('exchangeToken') or str(item.get('symbolToken', ''))
@@ -255,6 +261,15 @@ def fetch_advanced_oi(ticker_symbol, current_price):
                     info = strike_map[token]
                     strike = info["strike"]
                     oi_val = item.get("opnInterest", 0)
+                    vol_val = item.get("tradedVolume", 0)
+                    
+                    if strike == atm:
+                        if info["type"] == "CE":
+                            atm_ce_ltp = item.get("lastTradedPrice", 0)
+                            atm_ce_vwap = item.get("averageTradedPrice", 0)
+                        else:
+                            atm_pe_ltp = item.get("lastTradedPrice", 0)
+                            atm_pe_vwap = item.get("averageTradedPrice", 0)
                     
                     if strike not in oi_data:
                         oi_data[strike] = {"strike": strike, "ce_oi": 0, "pe_oi": 0}
@@ -262,11 +277,13 @@ def fetch_advanced_oi(ticker_symbol, current_price):
                     if info["type"] == "CE":
                         oi_data[strike]["ce_oi"] = oi_val
                         total_ce_oi += oi_val
+                        total_ce_vol += vol_val
                         if oi_val > highest_ce_oi["oi"]:
                             highest_ce_oi = {"strike": strike, "oi": oi_val}
                     else:
                         oi_data[strike]["pe_oi"] = oi_val
                         total_pe_oi += oi_val
+                        total_pe_vol += vol_val
                         if oi_val > highest_pe_oi["oi"]:
                             highest_pe_oi = {"strike": strike, "oi": oi_val}
             
@@ -299,7 +316,13 @@ def fetch_advanced_oi(ticker_symbol, current_price):
                 "atm_strike": atm,
                 "expiry": nearest_expiry,
                 "total_ce_oi": total_ce_oi,
-                "total_pe_oi": total_pe_oi
+                "total_pe_oi": total_pe_oi,
+                "total_ce_vol": total_ce_vol,
+                "total_pe_vol": total_pe_vol,
+                "atm_ce_ltp": atm_ce_ltp,
+                "atm_ce_vwap": atm_ce_vwap,
+                "atm_pe_ltp": atm_pe_ltp,
+                "atm_pe_vwap": atm_pe_vwap
             }
             
             # Cache the result
