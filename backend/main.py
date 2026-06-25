@@ -15,6 +15,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+def root():
+    return {"status": "Trading Backend is Live. Please access the frontend dashboard."}
+
 @app.get("/api/signal")
 def get_signal(ticker: str = "^NSEI"):
     """
