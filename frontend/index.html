@@ -32,7 +32,7 @@
             border-radius: 20px;
             padding: 3rem;
             width: 100%;
-            max-width: 600px;
+            max-width: 800px;
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             text-align: center;
         }
@@ -186,9 +186,19 @@
             border-bottom: 1px solid rgba(255,255,255,0.05);
             padding-bottom: 0.25rem;
         }
+
+        .chart-container {
+            margin-bottom: 2rem;
+            border-radius: 10px;
+            overflow: hidden;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
     </style>
 </head>
 <body>
+
+    <!-- Hidden Audio Element for Beep -->
+    <audio id="beepSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto"></audio>
 
     <div class="dashboard">
         <div class="header">
@@ -202,6 +212,33 @@
             <div id="signalBox" class="signal-box wait">
                 <h2 id="actionText" class="action-text">WAIT</h2>
                 <div id="strikeText" class="strike-text">No clear signal</div>
+            </div>
+
+            <!-- TradingView Live Chart Widget -->
+            <div class="chart-container">
+                <div class="tradingview-widget-container">
+                    <div id="tradingview_chart"></div>
+                    <script type="text/javascript" src="https://s3.tradingview.com/tv.js"></script>
+                    <script type="text/javascript">
+                    new TradingView.widget(
+                    {
+                    "width": "100%",
+                    "height": 400,
+                    "symbol": "NSE:NIFTY",
+                    "interval": "15",
+                    "timezone": "Asia/Kolkata",
+                    "theme": "dark",
+                    "style": "1",
+                    "locale": "en",
+                    "enable_publishing": false,
+                    "backgroundColor": "rgba(0, 0, 0, 0.2)",
+                    "hide_top_toolbar": false,
+                    "save_image": false,
+                    "container_id": "tradingview_chart"
+                    }
+                    );
+                    </script>
+                </div>
             </div>
 
             <div class="levels">
@@ -259,11 +296,16 @@
                 }
             }
             fetchSignal(); // Initial fetch
-            // Auto refresh every 30 seconds (30000 ms)
-            setInterval(fetchSignal, 30000);
+            setInterval(fetchSignal, 30000); // Auto refresh every 30s
         });
 
         function triggerNotification(action, target) {
+            // Play Loud Beep Sound
+            const beep = document.getElementById("beepSound");
+            if (beep) {
+                beep.play().catch(e => console.log("Audio play blocked by browser:", e));
+            }
+
             if ("Notification" in window && Notification.permission === "granted") {
                 const text = action === "BUY" ? `🚀 BUY SIGNAL TRIGGERED! Target: ${target}` : `🚨 SELL SIGNAL TRIGGERED! Target: ${target}`;
                 new Notification("AI Trading Dashboard", {
