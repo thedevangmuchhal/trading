@@ -81,10 +81,10 @@ import os
 # Global cache for only the filtered NIFTY tokens (saves massive memory)
 angel_filtered_opts = None
 
-def get_angel_tokens(base_symbol, current_price):
+def get_filtered_angel_options(base_symbol):
     """
     Downloads Angel One's massive JSON but streams it to save memory (Render 512MB limit).
-    Filters only for NIFTY options and caches the small resulting list.
+    Filters only for options matching the base_symbol and caches the small resulting list.
     """
     global angel_filtered_opts
     
@@ -95,6 +95,11 @@ def get_angel_tokens(base_symbol, current_price):
         print("Streaming Angel One Scrip Master JSON to save memory...")
         try:
             url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
+            
+            import ijson
+            import urllib.request
+            import tempfile
+            import os
             
             # Download to a temporary file on disk rather than holding 35MB in RAM
             temp_path = os.path.join(tempfile.gettempdir(), "angel_tokens.json")
@@ -116,9 +121,15 @@ def get_angel_tokens(base_symbol, current_price):
             
         except Exception as e:
             print("Failed to download or parse Angel tokens:", e)
-            return None, None
+            return None
             
-    opts = angel_filtered_opts
+    return angel_filtered_opts
+
+def get_angel_tokens(base_symbol, current_price):
+    """
+    Finds the exact CE and PE tokens for the nearest Expiry At-The-Money (ATM) strike.
+    """
+    opts = get_filtered_angel_options(base_symbol)
     if not opts:
         return None, None
         
