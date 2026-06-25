@@ -274,10 +274,24 @@ def fetch_advanced_oi(ticker_symbol, current_price):
             
     if not tokens_to_fetch: return None
         
-    try:
-        payload = {"NFO": tokens_to_fetch}
-        data = session.getMarketData("FULL", payload)
+    data = None
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            payload = {"NFO": tokens_to_fetch}
+            data = session.getMarketData("FULL", payload)
+            if data:
+                break
+        except Exception as e:
+            if attempt == max_retries - 1:
+                print(f"Error fetching Advanced Live OI from Angel after {max_retries} attempts: {e}")
+                return None
+            _time.sleep(1) # Wait 1 second before retrying
+            
+    if not data:
+        return None
         
+    try:
         if data.get('status') and data.get('data') and data['data'].get('fetched'):
             fetched = data['data']['fetched']
             oi_data = {}
