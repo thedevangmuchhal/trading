@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Trading Dashboard</title>
+    <title>Trading Dashboard</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&display=swap" rel="stylesheet">
     <!-- Lightweight Charts - TradingView's open-source charting library (no restrictions) -->
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
@@ -18,6 +18,69 @@
             --red: #ff1744;
             --accent: #3b82f6;
             --gold: #ffd600;
+        }
+
+        /* PIN Overlay */
+        .pin-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(10, 14, 26, 0.95);
+            backdrop-filter: blur(8px);
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+            text-align: center;
+        }
+        .pin-box {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 12px;
+            max-width: 400px;
+            border: 1px solid rgba(255,255,255,0.1);
+        }
+        .pin-box h2 {
+            color: white;
+            margin-bottom: 1rem;
+        }
+        .disclaimer {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-bottom: 1.5rem;
+            line-height: 1.4;
+        }
+        .pin-input {
+            width: 100%;
+            padding: 1rem;
+            background: var(--bg-color);
+            border: 1px solid rgba(255,255,255,0.2);
+            color: white;
+            font-size: 1.2rem;
+            text-align: center;
+            letter-spacing: 5px;
+            border-radius: 8px;
+            margin-bottom: 1rem;
+            outline: none;
+        }
+        .pin-input:focus {
+            border-color: var(--accent);
+        }
+        .pin-btn {
+            background: var(--accent);
+            color: white;
+            border: none;
+            width: 100%;
+            padding: 1rem;
+            border-radius: 8px;
+            font-size: 1rem;
+            font-weight: bold;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .pin-btn:hover {
+            background: #2563eb;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -236,27 +299,45 @@
         }
         .connection-status.connected { background: rgba(0,230,118,0.1); color: var(--green); }
         .connection-status.disconnected { background: rgba(255,23,68,0.1); color: var(--red); }
+
+        .pin-overlay { position: fixed; top:0; left:0; width:100%; height:100%; background: #0f172a; z-index: 1000; display: flex; align-items: center; justify-content: center; }
+        .pin-box { background: var(--card-bg); padding: 2rem; border-radius: 12px; text-align: center; max-width: 400px; border: 1px solid rgba(255,255,255,0.1); }
+        .disclaimer { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 1.5rem; text-align: left; line-height: 1.4; }
+        .pin-input { width: 100%; padding: 0.75rem; border-radius: 8px; border: 1px solid rgba(255,255,255,0.1); background: #0f172a; color: white; text-align: center; font-size: 1.2rem; margin-bottom: 1rem; box-sizing: border-box; }
+        .pin-btn { background: var(--accent); color: white; border: none; padding: 0.75rem 2rem; border-radius: 8px; cursor: pointer; font-weight: 700; width: 100%; }
     </style>
 </head>
 <body>
 
     <audio id="beepSound" src="https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3" preload="auto"></audio>
 
+    <div id="pinOverlay" class="pin-overlay">
+        <div class="pin-box">
+            <h2>Restricted Access</h2>
+            <div class="disclaimer">
+                <strong>DISCLAIMER:</strong> This dashboard is a personal algorithmic experiment. It is for <strong>Educational Purposes Only</strong> and does not constitute financial advice. We are NOT SEBI registered Investment Advisors or Research Analysts. Do not trade based on these signals. Capital is at risk.
+            </div>
+            <input type="password" id="pinInput" class="pin-input" placeholder="Enter PIN" maxlength="4" />
+            <button class="pin-btn" onclick="checkPin()">Access Dashboard</button>
+            <div id="pinError" style="color: var(--red); margin-top: 1rem; font-size: 0.9rem; display: none;">Incorrect PIN</div>
+        </div>
+    </div>
+
     <div class="dashboard">
         <div class="header">
-            <h1>AI Trading Dashboard</h1>
-            <div class="timestamp" id="timestamp">Last Updated: --</div>
+            <h1>Trading Dashboard</h1>
+            <div class="timestamp" id="timestamp">Initializing System...</div>
         </div>
 
         <div class="search-bar">
             <input type="text" id="symbolInput" placeholder="Enter Symbol (e.g. RELIANCE.NS, AAPL, ^NSEI)" value="^NSEI">
-            <button onclick="analyzeSymbol()">Analyze</button>
+            <button onclick="fetchData()">Scan Market</button>
         </div>
 
-        <div id="connectionStatus" class="connection-status disconnected">⏳ Connecting to AI Engine...</div>
+        <div id="connectionStatus" class="connection-status disconnected">⏳ Connecting to Engine...</div>
 
         <div id="eventBanner" style="display:none; background: rgba(255,23,68,0.2); border-left: 4px solid var(--red); color: #fff; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; font-weight: 600;">
-            ⚠️ HIGH VOLATILITY EVENT WARNING: Macro Event detected in headlines. AI Confidence reduced. Do not trade blindly today.
+            ⚠️ HIGH VOLATILITY EVENT WARNING: Macro Event detected in headlines. Confidence reduced. Do not trade blindly today.
         </div>
 
         <div class="loader" id="loader"></div>
@@ -345,16 +426,32 @@
             </div>
 
             <div class="news-ticker">
-                <strong>Latest AI Processed News:</strong>
+                <strong>Latest Processed News:</strong>
                 <div id="newsItems"></div>
             </div>
         </div>
 
-        <button class="refresh-btn" onclick="analyzeSymbol()" style="margin-top: 0.5rem;">⚡ Scan Market Now</button>
+        <button class="refresh-btn" onclick="fetchData()" style="margin-top: 0.5rem;">⚡ Scan Market Now</button>
     </div>
 
     <script>
-        const BASE_URL = "https://trading-98h5.onrender.com";
+        function checkPin() {
+            const pin = document.getElementById('pinInput').value;
+            if (pin === '5555') {
+                document.getElementById('pinOverlay').style.display = 'none';
+                fetchData();
+                setInterval(fetchData, 60000);
+            } else {
+                document.getElementById('pinError').style.display = 'block';
+                document.getElementById('pinInput').value = '';
+            }
+        }
+
+        document.getElementById('pinInput').addEventListener('keypress', function (e) {
+            if (e.key === 'Enter') checkPin();
+        });
+
+        const API_BASE = "https://trading-98h5.onrender.com/api";
         let currentTicker = "^NSEI";
         let lastAction = "WAIT";
         let priceChart = null;
@@ -365,8 +462,6 @@
                 Notification.requestPermission();
             }
             initPriceChart();
-            analyzeSymbol();
-            setInterval(analyzeSymbol, 60000); // Auto refresh every 60s to avoid rate limits
         });
 
         function initPriceChart() {
@@ -386,7 +481,7 @@
                 wickUpColor: '#00e676', wickDownColor: '#ff1744',
             });
             window.addEventListener('resize', () => {
-                priceChart.applyOptions({ width: container.clientWidth });
+                if (priceChart) priceChart.applyOptions({ width: container.clientWidth });
             });
         }
 
@@ -394,7 +489,7 @@
             const beep = document.getElementById("beepSound");
             if (beep) beep.play().catch(() => {});
             if ("Notification" in window && Notification.permission === "granted") {
-                new Notification("AI Trading Dashboard", {
+                new Notification("Trading Dashboard", {
                     body: action === "BUY" ? `🚀 BUY! Target: ${target}` : `🚨 SELL! Target: ${target}`,
                     icon: "https://cdn-icons-png.flaticon.com/512/2933/2933116.png"
                 });
@@ -452,7 +547,7 @@
                 const oiData = oiRes ? await oiRes.json() : { oi_data: [], pcr: null };
 
                 status.className = 'connection-status connected';
-                status.innerHTML = '🟢 Connected to AI Engine | OI Tick: ' + (oiData.pcr !== null ? '✅ Live' : '⚠️ No OI Data');
+                status.innerHTML = '🟢 Connected to Engine | OI Tick: ' + (oiData.pcr !== null ? '✅ Live' : '⚠️ No OI Data');
 
                 // Update Signal
                 const signalBox = document.getElementById('signalBox');
