@@ -1,5 +1,9 @@
 fastapi
 uvicorn
+pandas
 yfinance
 vaderSentiment
 requests
+smartapi-python
+pyotp
+logzero
