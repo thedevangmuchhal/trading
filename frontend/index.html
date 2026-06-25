@@ -255,6 +255,10 @@
 
         <div id="connectionStatus" class="connection-status disconnected">⏳ Connecting to AI Engine...</div>
 
+        <div id="eventBanner" style="display:none; background: rgba(255,23,68,0.2); border-left: 4px solid var(--red); color: #fff; padding: 1rem; border-radius: 8px; margin-bottom: 1rem; font-weight: 600;">
+            ⚠️ HIGH VOLATILITY EVENT WARNING: Macro Event detected in headlines. AI Confidence reduced. Do not trade blindly today.
+        </div>
+
         <div class="loader" id="loader"></div>
 
         <div id="content" style="display:none;">
@@ -292,7 +296,7 @@
 
             <!-- OI Chart -->
             <div class="chart-card" id="oiChartCard" style="display:none; margin-bottom: 1rem;">
-                <h3>🏦 Options Open Interest (Angel One Live)</h3>
+                <h3>🏦 Options Open Interest (OI Tick Live)</h3>
                 <div id="oiChart"></div>
             </div>
 
@@ -305,6 +309,14 @@
                 <div class="stat-card">
                     <div class="stat-label">PCR (OI / Vol)</div>
                     <div id="pcrVal" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">FII Net (Cr)</div>
+                    <div id="fiiVal" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">DII Net (Cr)</div>
+                    <div id="diiVal" class="stat-value">--</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Sentiment</div>
@@ -320,7 +332,15 @@
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Opt Vol (CE / PE)</div>
-                    <div id="volVal" class="stat-value" style="font-size: 0.8rem;">--</div>
+                    <div id="optVolVal" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Delta (CE / PE)</div>
+                    <div id="deltaVal" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Implied Vol (CE / PE)</div>
+                    <div id="ivVal" class="stat-value">--</div>
                 </div>
             </div>
 
@@ -432,7 +452,7 @@
                 const oiData = oiRes ? await oiRes.json() : { oi_data: [], pcr: null };
 
                 status.className = 'connection-status connected';
-                status.innerHTML = '🟢 Connected to AI Engine | Angel One: ' + (oiData.pcr !== null ? '✅ Live OI' : '⚠️ No OI Data');
+                status.innerHTML = '🟢 Connected to AI Engine | OI Tick: ' + (oiData.pcr !== null ? '✅ Live' : '⚠️ No OI Data');
 
                 // Update Signal
                 const signalBox = document.getElementById('signalBox');
@@ -447,6 +467,24 @@
 
                 // Stats
                 document.getElementById('confidenceVal').innerText = data.confidence_score + ' / 100';
+                
+                // Event Warning
+                if (data.event_warning) {
+                    document.getElementById('eventBanner').style.display = 'block';
+                } else {
+                    document.getElementById('eventBanner').style.display = 'none';
+                }
+                
+                // FII/DII
+                document.getElementById('fiiVal').innerText = data.fii_net ? data.fii_net : '--';
+                if (data.fii_net > 0) document.getElementById('fiiVal').className = 'stat-value bullish';
+                else if (data.fii_net < 0) document.getElementById('fiiVal').className = 'stat-value bearish';
+                else document.getElementById('fiiVal').className = 'stat-value';
+                
+                document.getElementById('diiVal').innerText = data.dii_net ? data.dii_net : '--';
+                if (data.dii_net > 0) document.getElementById('diiVal').className = 'stat-value bullish';
+                else if (data.dii_net < 0) document.getElementById('diiVal').className = 'stat-value bearish';
+                else document.getElementById('diiVal').className = 'stat-value';
                 
                 const pcrElem = document.getElementById('pcrVal');
                 let pcrText = '-- / --';
@@ -480,9 +518,16 @@
                 if (oiData && oiData.total_ce_vol !== undefined) {
                     const ceVol = (oiData.total_ce_vol / 1000000).toFixed(1) + 'M';
                     const peVol = (oiData.total_pe_vol / 1000000).toFixed(1) + 'M';
-                    document.getElementById('volVal').innerText = `${ceVol} / ${peVol}`;
+                    document.getElementById('optVolVal').innerText = `${ceVol} / ${peVol}`;
+                    
+                    if (oiData.greeks) {
+                        document.getElementById('deltaVal').innerText = `${oiData.greeks.ce_delta} / ${oiData.greeks.pe_delta}`;
+                        document.getElementById('ivVal').innerText = `${oiData.greeks.ce_iv}% / ${oiData.greeks.pe_iv}%`;
+                    }
                 } else {
-                    document.getElementById('volVal').innerText = '--';
+                    document.getElementById('optVolVal').innerText = '--';
+                    document.getElementById('deltaVal').innerText = '--';
+                    document.getElementById('ivVal').innerText = '--';
                 }
 
                 document.getElementById('timestamp').innerText = "Last Updated: " + new Date().toLocaleTimeString();
