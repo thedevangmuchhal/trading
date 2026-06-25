@@ -23,6 +23,8 @@ ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP_SECRET", "")
 
 _angel_session_cache = None
 _oi_cache = {} # Cache for advanced OI data to prevent rate-limiting
+_morning_oi_cache = {} # Track 9:15 AM OI for Buildup tracking
+
 def get_angel_session():
     """
     Establishes a secure, SEBI-compliant connection to Angel One using TOTP.
@@ -176,6 +178,8 @@ def get_angel_tokens(base_symbol, current_price):
 import threading
 _oi_lock = threading.Lock()
 
+from options_math import calculate_iv, calculate_delta
+
 def fetch_advanced_oi(ticker_symbol, current_price):
     """
     Connects to Angel One SmartAPI, gets live Open Interest for +/- 5 strikes from ATM,
@@ -275,23 +279,31 @@ def fetch_advanced_oi(ticker_symbol, current_price):
                         else:
                             atm_pe_ltp = item.get("lastTradedPrice", 0)
                             atm_pe_vwap = item.get("averageTradedPrice", 0)
+                            
+                    # Track Morning OI for buildup
+                    cache_key = f"{ticker_symbol}_{strike}_{info['type']}"
+                    if cache_key not in _morning_oi_cache:
+                        _morning_oi_cache[cache_key] = oi_val
                     
                     if strike not in oi_data:
-                        oi_data[strike] = {"strike": strike, "ce_oi": 0, "pe_oi": 0}
+                        oi_data[strike] = {"strike": strike, "ce_oi": 0, "pe_oi": 0, "ce_oi_change": 0, "pe_oi_change": 0}
+                    
+                    oi_change = oi_val - _morning_oi_cache[cache_key]
                     
                     if info["type"] == "CE":
                         oi_data[strike]["ce_oi"] = oi_val
+                        oi_data[strike]["ce_oi_change"] = oi_change
                         total_ce_oi += oi_val
                         total_ce_vol += vol_val
                         if oi_val > highest_ce_oi["oi"]:
                             highest_ce_oi = {"strike": strike, "oi": oi_val}
                     else:
                         oi_data[strike]["pe_oi"] = oi_val
+                        oi_data[strike]["pe_oi_change"] = oi_change
                         total_pe_oi += oi_val
                         total_pe_vol += vol_val
                         if oi_val > highest_pe_oi["oi"]:
                             highest_pe_oi = {"strike": strike, "oi": oi_val}
-            
             # Calculate Max Pain
             min_pain = float('inf')
             max_pain_strike = 0
@@ -312,8 +324,33 @@ def fetch_advanced_oi(ticker_symbol, current_price):
             
             oi_list = sorted(oi_data.values(), key=lambda x: x["strike"])
             
+            # Calculate Option Greeks for ATM Strikes
+            try:
+                exp_date = datetime.strptime(nearest_expiry, "%d%b%Y")
+                days_to_exp = max(0.5, (exp_date - datetime.now()).days)
+                T = days_to_exp / 365.0
+            except:
+                T = 1.0 / 365.0
+                
+            r = 0.07 # 7% risk-free rate assumption for India
+            
+            # CE Greeks
+            atm_ce_iv = calculate_iv(atm_ce_ltp, current_price, atm, T, r, "CE")
+            atm_ce_delta = calculate_delta(current_price, atm, T, r, atm_ce_iv, "CE")
+            
+            # PE Greeks
+            atm_pe_iv = calculate_iv(atm_pe_ltp, current_price, atm, T, r, "PE")
+            atm_pe_delta = calculate_delta(current_price, atm, T, r, atm_pe_iv, "PE")
+            
+            # Intraday Buildup Totals
+            total_ce_change = sum(d["ce_oi_change"] for d in oi_data.values())
+            total_pe_change = sum(d["pe_oi_change"] for d in oi_data.values())
+            
+            vpcr = round(total_pe_vol / total_ce_vol, 2) if total_ce_vol > 0 else 0
+            
             result = {
                 "pcr": broad_pcr,
+                "vpcr": vpcr,
                 "max_pain": max_pain_strike,
                 "highest_ce_strike": highest_ce_oi["strike"],
                 "highest_pe_strike": highest_pe_oi["strike"],
@@ -327,7 +364,17 @@ def fetch_advanced_oi(ticker_symbol, current_price):
                 "atm_ce_ltp": atm_ce_ltp,
                 "atm_ce_vwap": atm_ce_vwap,
                 "atm_pe_ltp": atm_pe_ltp,
-                "atm_pe_vwap": atm_pe_vwap
+                "atm_pe_vwap": atm_pe_vwap,
+                "greeks": {
+                    "ce_iv": round(atm_ce_iv * 100, 2),
+                    "pe_iv": round(atm_pe_iv * 100, 2),
+                    "ce_delta": round(atm_ce_delta, 2),
+                    "pe_delta": round(atm_pe_delta, 2)
+                },
+                "buildup": {
+                    "ce_change": total_ce_change,
+                    "pe_change": total_pe_change
+                }
             }
             
             # Cache the result
@@ -364,6 +411,27 @@ def fetch_news(ticker_symbol="^NSEI"):
     except Exception as e:
         print(f"Error fetching news: {e}")
         return []
+
+def fetch_fii_dii():
+    """Fetches end of day FII / DII cash data from NSE API."""
+    try:
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+            'Accept': '*/*',
+            'Accept-Language': 'en-US,en;q=0.5'
+        }
+        import requests
+        s = requests.Session()
+        s.headers.update(headers)
+        # Hit homepage first to get cookies, required to bypass NSE WAF
+        s.get('https://www.nseindia.com', timeout=5)
+        # Fetch actual data
+        res = s.get('https://www.nseindia.com/api/fiidiiTradeReact', timeout=5)
+        if res.status_code == 200:
+            return res.json()
+    except Exception as e:
+        print(f"Error fetching FII/DII: {e}")
+    return []
 
 if __name__ == "__main__":
     df = fetch_market_data()

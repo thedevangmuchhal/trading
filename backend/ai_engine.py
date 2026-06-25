@@ -160,7 +160,7 @@ def analyze_technicals(df):
     }
 
 def generate_signals(ticker="^NSEI"):
-    from data_fetcher import fetch_advanced_oi
+    from data_fetcher import fetch_advanced_oi, fetch_fii_dii
     
     df = fetch_market_data(ticker)
     headlines = fetch_news(ticker)
@@ -178,6 +178,38 @@ def generate_signals(ticker="^NSEI"):
 
     # Base Confidence
     confidence = 50 
+    
+    # 0. Macro Event Risk & FII/DII Logic
+    event_warning = False
+    event_keywords = ["rbi", "fed", "policy", "rate", "budget", "cpi", "inflation", "election", "war", "crash"]
+    for headline in headlines:
+        if any(keyword in headline.lower() for keyword in event_keywords):
+            event_warning = True
+            confidence -= 30  # Slash confidence heavily on event days due to unpredictable volatility
+            break
+            
+    fii_dii_data = fetch_fii_dii()
+    fii_net = 0
+    dii_net = 0
+    if fii_dii_data:
+        for item in fii_dii_data:
+            try:
+                if item.get("category") == "FII/FPI":
+                    fii_net = float(item.get("netValue", 0))
+                elif item.get("category") == "DII":
+                    dii_net = float(item.get("netValue", 0))
+            except:
+                pass
+                
+        # FII & DII acting together is a strong trend predictor
+        if fii_net > 0 and dii_net > 0:
+            confidence += 15  # Both buying, massive institutional support
+        elif fii_net < 0 and dii_net < 0:
+            confidence -= 15  # Both selling, massive institutional dumping
+        elif fii_net > 5000:
+            confidence += 10  # Massive FII solo buying
+        elif fii_net < -5000:
+            confidence -= 10  # Massive FII solo selling
     
     # 1. Sentiment Weight (Max +/- 10)
     if sentiment_score > 20: confidence += 10
@@ -257,6 +289,43 @@ def generate_signals(ticker="^NSEI"):
         elif atm_pe_ltp > 0 and atm_pe_vwap > 0 and atm_pe_ltp < atm_pe_vwap:
             confidence += 5 # Puts are fading
 
+    # 9. Hedge-Fund Grade Greeks & Buildup Logic (Max +/- 30)
+    if oi_metrics and 'greeks' in oi_metrics:
+        greeks = oi_metrics['greeks']
+        buildup = oi_metrics['buildup']
+        
+        # IV Spikes (Volatility expansion means trend acceleration)
+        ce_iv = greeks.get('ce_iv', 0)
+        pe_iv = greeks.get('pe_iv', 0)
+        if ce_iv > pe_iv + 5: confidence += 10 # Call IV spiking, extreme bullish demand
+        elif pe_iv > ce_iv + 5: confidence -= 10 # Put IV spiking, extreme fear
+        
+        # Intraday OI Buildup (Change in OI)
+        ce_change = buildup.get('ce_change', 0)
+        pe_change = buildup.get('pe_change', 0)
+        
+        # Aggressive Call Writing Buildup (Bearish)
+        if ce_change > pe_change * 1.5 and ce_change > 0:
+            confidence -= 10
+        # Aggressive Put Writing Buildup (Bullish)
+        elif pe_change > ce_change * 1.5 and pe_change > 0:
+            confidence += 10
+            
+    # 10. Yesterday's Breakout (Macro Prediction)
+    try:
+        daily_df = fetch_market_data(ticker, period="5d", interval="1d")
+        if not daily_df.empty and len(daily_df) >= 2:
+            yesterday_candle = daily_df.iloc[-2]
+            y_high = yesterday_candle['High']
+            y_low = yesterday_candle['Low']
+            
+            if current_price > y_high:
+                confidence += 15 # Breaking yesterday's high, massive bullish momentum
+            elif current_price < y_low:
+                confidence -= 15 # Breaking yesterday's low, massive bearish momentum
+    except Exception as e:
+        pass
+
     # 9. ADX Choppy Market Filter (OVERRIDE)
     market_condition = "Trending"
     if tech_data['adx'] < 20:
@@ -309,7 +378,10 @@ def generate_signals(ticker="^NSEI"):
         "target": round(target, 2),
         "support": tech_data['support'],
         "resistance": tech_data['resistance'],
-        "recent_headlines": headlines[:3]
+        "recent_headlines": headlines[:3],
+        "event_warning": event_warning,
+        "fii_net": fii_net,
+        "dii_net": dii_net
     }
 
 if __name__ == "__main__":
