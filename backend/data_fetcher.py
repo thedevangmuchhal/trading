@@ -173,6 +173,9 @@ def get_angel_tokens(base_symbol, current_price):
     
     return ce_token, pe_token
 
+import threading
+_oi_lock = threading.Lock()
+
 def fetch_advanced_oi(ticker_symbol, current_price):
     """
     Connects to Angel One SmartAPI, gets live Open Interest for +/- 5 strikes from ATM,
@@ -180,13 +183,15 @@ def fetch_advanced_oi(ticker_symbol, current_price):
     Results are cached for 15 seconds to prevent rate-limiting from parallel requests.
     """
     global _oi_cache
-    now_ts = datetime.now().timestamp()
-    if ticker_symbol in _oi_cache:
-        cached = _oi_cache[ticker_symbol]
-        if (now_ts - cached['timestamp']) < 15:
-            return cached['data']
-            
-    session = get_angel_session()
+    
+    with _oi_lock:
+        now_ts = datetime.now().timestamp()
+        if ticker_symbol in _oi_cache:
+            cached = _oi_cache[ticker_symbol]
+            if (now_ts - cached['timestamp']) < 15:
+                return cached['data']
+                
+        session = get_angel_session()
     if not session:
         return None
         
