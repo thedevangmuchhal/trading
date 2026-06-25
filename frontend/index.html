@@ -349,8 +349,8 @@
             // Map Yahoo Finance ticker format to TradingView symbol format
             let tvSymbol = currentTicker;
             if (currentTicker === "^NSEI" || currentTicker === "NIFTY") {
-                // NSE blocks free 15m intraday charts. CAPITALCOM:IN50 is a free CFD that mirrors Nifty perfectly.
-                tvSymbol = "CAPITALCOM:IN50"; 
+                // Use PEPPERSTONE CFD mirror for free intraday Nifty charts
+                tvSymbol = "PEPPERSTONE:NIFTY50"; 
             } else if (currentTicker.endsWith(".NS")) {
                 tvSymbol = "NSE:" + currentTicker.replace(".NS", "");
             } else if (currentTicker.endsWith(".BO")) {
