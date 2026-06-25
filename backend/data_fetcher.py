@@ -22,7 +22,7 @@ ANGEL_PIN = os.environ.get("ANGEL_PIN", "")
 ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP_SECRET", "")
 
 _angel_session_cache = None
-
+_oi_cache = {} # Cache for advanced OI data to prevent rate-limiting
 def get_angel_session():
     """
     Establishes a secure, SEBI-compliant connection to Angel One using TOTP.
@@ -177,7 +177,15 @@ def fetch_advanced_oi(ticker_symbol, current_price):
     """
     Connects to Angel One SmartAPI, gets live Open Interest for +/- 5 strikes from ATM,
     and calculates broad PCR, Max Pain, Highest CE OI, and Highest PE OI.
+    Results are cached for 15 seconds to prevent rate-limiting from parallel requests.
     """
+    global _oi_cache
+    now_ts = datetime.now().timestamp()
+    if ticker_symbol in _oi_cache:
+        cached = _oi_cache[ticker_symbol]
+        if (now_ts - cached['timestamp']) < 15:
+            return cached['data']
+            
     session = get_angel_session()
     if not session:
         return None
@@ -280,12 +288,27 @@ def fetch_advanced_oi(ticker_symbol, current_price):
 
             broad_pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else None
             
-            return {
+            oi_list = sorted(oi_data.values(), key=lambda x: x["strike"])
+            
+            result = {
                 "pcr": broad_pcr,
                 "max_pain": max_pain_strike,
                 "highest_ce_strike": highest_ce_oi["strike"],
-                "highest_pe_strike": highest_pe_oi["strike"]
+                "highest_pe_strike": highest_pe_oi["strike"],
+                "oi_data": oi_list,
+                "atm_strike": atm,
+                "expiry": nearest_expiry,
+                "total_ce_oi": total_ce_oi,
+                "total_pe_oi": total_pe_oi
             }
+            
+            # Cache the result
+            _oi_cache[ticker_symbol] = {
+                "timestamp": now_ts,
+                "data": result
+            }
+            
+            return result
     except Exception as e:
         print(f"Error fetching Advanced Live OI from Angel: {e}")
         
