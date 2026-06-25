@@ -261,7 +261,7 @@ def fetch_advanced_oi(ticker_symbol, current_price):
                     info = strike_map[token]
                     strike = info["strike"]
                     oi_val = item.get("opnInterest", 0)
-                    vol_val = item.get("tradedVolume", 0)
+                    vol_val = item.get("tradeVolume", 0)
                     
                     if strike == atm:
                         if info["type"] == "CE":
