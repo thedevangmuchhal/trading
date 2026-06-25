@@ -35,14 +35,12 @@ def analyze_technicals(df):
     if df.empty:
         return {}
 
-    # Calculate indicators using pure pandas
     df['EMA_20'] = df['Close'].ewm(span=20, adjust=False).mean()
     df['EMA_50'] = df['Close'].ewm(span=50, adjust=False).mean()
     df['ATR'] = calculate_atr(df, 14)
     df['RSI'] = calculate_rsi(df['Close'], 14)
 
     latest = df.iloc[-1]
-    
     current_price = latest['Close']
     
     trend = "Neutral"
@@ -132,7 +130,3 @@ def generate_signals(ticker="^NSEI"):
         "resistance": tech_data['resistance'],
         "recent_headlines": headlines[:3]
     }
-
-if __name__ == "__main__":
-    import json
-    print(json.dumps(generate_signals(), indent=2))
