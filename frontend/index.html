@@ -471,7 +471,11 @@
                 document.getElementById('priceVal').innerText = data.current_price;
 
                 // Stats
-                document.getElementById('confidenceVal').innerText = data.confidence_score + ' / 100';
+                const confElem = document.getElementById('confidenceVal');
+                confElem.innerText = data.confidence_score + ' / 100';
+                if (data.confidence_score >= 70) confElem.className = 'stat-value bullish';
+                else if (data.confidence_score <= 30) confElem.className = 'stat-value bearish';
+                else confElem.className = 'stat-value';
                 
                 // Event Warning
                 if (data.event_warning) {
@@ -531,19 +535,33 @@
                     patternElem.className = 'stat-value';
                 }
 
+                const optVolElem = document.getElementById('optVolVal');
+                const deltaElem = document.getElementById('deltaVal');
+                const ivElem = document.getElementById('ivVal');
+
                 if (oiData && oiData.total_ce_vol !== undefined) {
-                    const ceVol = (oiData.total_ce_vol / 1000000).toFixed(1) + 'M';
-                    const peVol = (oiData.total_pe_vol / 1000000).toFixed(1) + 'M';
-                    document.getElementById('optVolVal').innerText = `${ceVol} / ${peVol}`;
+                    const ceVol = oiData.total_ce_vol;
+                    const peVol = oiData.total_pe_vol;
+                    optVolElem.innerText = (ceVol / 1000000).toFixed(1) + 'M / ' + (peVol / 1000000).toFixed(1) + 'M';
+                    if (peVol > ceVol * 1.1) optVolElem.className = 'stat-value bullish';
+                    else if (ceVol > peVol * 1.1) optVolElem.className = 'stat-value bearish';
+                    else optVolElem.className = 'stat-value';
                     
                     if (oiData.greeks) {
-                        document.getElementById('deltaVal').innerText = `${oiData.greeks.ce_delta} / ${oiData.greeks.pe_delta}`;
-                        document.getElementById('ivVal').innerText = `${oiData.greeks.ce_iv}% / ${oiData.greeks.pe_iv}%`;
+                        deltaElem.innerText = `${oiData.greeks.ce_delta} / ${oiData.greeks.pe_delta}`;
+                        if (Math.abs(oiData.greeks.ce_delta) > Math.abs(oiData.greeks.pe_delta)) deltaElem.className = 'stat-value bullish';
+                        else if (Math.abs(oiData.greeks.pe_delta) > Math.abs(oiData.greeks.ce_delta)) deltaElem.className = 'stat-value bearish';
+                        else deltaElem.className = 'stat-value';
+
+                        ivElem.innerText = `${oiData.greeks.ce_iv}% / ${oiData.greeks.pe_iv}%`;
+                        if (oiData.greeks.pe_iv > oiData.greeks.ce_iv * 1.1) ivElem.className = 'stat-value bearish';
+                        else if (oiData.greeks.ce_iv > oiData.greeks.pe_iv * 1.1) ivElem.className = 'stat-value bullish';
+                        else ivElem.className = 'stat-value';
                     }
                 } else {
-                    document.getElementById('optVolVal').innerText = '--';
-                    document.getElementById('deltaVal').innerText = '--';
-                    document.getElementById('ivVal').innerText = '--';
+                    optVolElem.innerText = '--';
+                    deltaElem.innerText = '--';
+                    ivElem.innerText = '--';
                 }
 
                 document.getElementById('timestamp').innerText = "Last Updated: " + new Date().toLocaleTimeString();
