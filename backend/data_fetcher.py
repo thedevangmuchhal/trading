@@ -21,10 +21,17 @@ ANGEL_CLIENT_ID = os.environ.get("ANGEL_CLIENT_ID", "")
 ANGEL_PIN = os.environ.get("ANGEL_PIN", "")
 ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP_SECRET", "")
 
+_angel_session_cache = None
+
 def get_angel_session():
     """
     Establishes a secure, SEBI-compliant connection to Angel One using TOTP.
+    Caches the session to prevent exceeding API access rate limits.
     """
+    global _angel_session_cache
+    if _angel_session_cache is not None:
+        return _angel_session_cache
+        
     if not all([ANGEL_API_KEY, ANGEL_CLIENT_ID, ANGEL_PIN, ANGEL_TOTP_SECRET]):
         return None
     try:
@@ -33,6 +40,7 @@ def get_angel_session():
         data = obj.generateSession(ANGEL_CLIENT_ID, ANGEL_PIN, totp_code)
         if data.get('status'):
             print("Successfully connected to Angel One SmartAPI!")
+            _angel_session_cache = obj
             return obj
     except Exception as e:
         print(f"Angel Login Failed: {e}")
@@ -165,10 +173,10 @@ def get_angel_tokens(base_symbol, current_price):
     
     return ce_token, pe_token
 
-def fetch_pcr(ticker_symbol, current_price):
+def fetch_advanced_oi(ticker_symbol, current_price):
     """
-    Connects to Angel One SmartAPI, gets live Open Interest for ATM CE and PE,
-    and calculates Put-Call Ratio.
+    Connects to Angel One SmartAPI, gets live Open Interest for +/- 5 strikes from ATM,
+    and calculates broad PCR, Max Pain, Highest CE OI, and Highest PE OI.
     """
     session = get_angel_session()
     if not session:
@@ -182,29 +190,104 @@ def fetch_pcr(ticker_symbol, current_price):
     else:
         return None # Not supported
         
-    ce_token, pe_token = get_angel_tokens(base_symbol, current_price)
-    if not ce_token or not pe_token:
+    opts = get_filtered_angel_options(base_symbol)
+    if not opts:
         return None
         
+    def parse_expiry(date_str):
+        try: return datetime.strptime(date_str, "%d%b%Y")
+        except: return datetime.max
+
+    valid_opts = [x for x in opts if x.get("expiry")]
+    now = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+    valid_opts = [x for x in valid_opts if parse_expiry(x["expiry"]) >= now]
+    if not valid_opts: return None
+    
+    valid_opts.sort(key=lambda x: parse_expiry(x["expiry"]))
+    nearest_expiry = valid_opts[0]["expiry"]
+    current_expiry_opts = [x for x in valid_opts if x["expiry"] == nearest_expiry]
+    
+    def get_strike(opt):
+        try: return float(opt["strike"]) / 100
+        except: return 0
+            
+    atm = round(current_price / 50) * 50
+    strikes_to_fetch = [atm + (i * 50) for i in range(-5, 6)]
+    
+    tokens_to_fetch = []
+    strike_map = {}
+    
+    for strike in strikes_to_fetch:
+        ce = next((x for x in current_expiry_opts if get_strike(x) == strike and x["symbol"].endswith("CE")), None)
+        pe = next((x for x in current_expiry_opts if get_strike(x) == strike and x["symbol"].endswith("PE")), None)
+        if ce:
+            tokens_to_fetch.append(ce["token"])
+            strike_map[ce["token"]] = {"strike": strike, "type": "CE"}
+        if pe:
+            tokens_to_fetch.append(pe["token"])
+            strike_map[pe["token"]] = {"strike": strike, "type": "PE"}
+            
+    if not tokens_to_fetch: return None
+        
     try:
-        # Fetch Live OI from Angel
-        payload = {
-            "NFO": [ce_token, pe_token]
-        }
+        payload = {"NFO": tokens_to_fetch}
         data = session.getMarketData("FULL", payload)
+        
         if data.get('status') and data.get('data') and data['data'].get('fetched'):
             fetched = data['data']['fetched']
-            ce_oi = 0
-            pe_oi = 0
+            oi_data = {}
+            total_ce_oi = 0
+            total_pe_oi = 0
+            highest_ce_oi = {"strike": 0, "oi": 0}
+            highest_pe_oi = {"strike": 0, "oi": 0}
+            
             for item in fetched:
                 token = item.get('exchangeToken') or str(item.get('symbolToken', ''))
-                if token == ce_token: ce_oi = item.get('opnInterest', 0)
-                if token == pe_token: pe_oi = item.get('opnInterest', 0)
-                
-            if ce_oi > 0:
-                return round(pe_oi / ce_oi, 2)
+                if token in strike_map:
+                    info = strike_map[token]
+                    strike = info["strike"]
+                    oi_val = item.get("opnInterest", 0)
+                    
+                    if strike not in oi_data:
+                        oi_data[strike] = {"strike": strike, "ce_oi": 0, "pe_oi": 0}
+                    
+                    if info["type"] == "CE":
+                        oi_data[strike]["ce_oi"] = oi_val
+                        total_ce_oi += oi_val
+                        if oi_val > highest_ce_oi["oi"]:
+                            highest_ce_oi = {"strike": strike, "oi": oi_val}
+                    else:
+                        oi_data[strike]["pe_oi"] = oi_val
+                        total_pe_oi += oi_val
+                        if oi_val > highest_pe_oi["oi"]:
+                            highest_pe_oi = {"strike": strike, "oi": oi_val}
+            
+            # Calculate Max Pain
+            min_pain = float('inf')
+            max_pain_strike = 0
+            for test_strike in strikes_to_fetch:
+                total_pain = 0
+                for s in strikes_to_fetch:
+                    if s not in oi_data: continue
+                    # Call buyers lose if price < strike. Sellers lose if price > strike. Pain = value of ITM options
+                    if s < test_strike:
+                        total_pain += (test_strike - s) * oi_data[s]["ce_oi"]
+                    if s > test_strike:
+                        total_pain += (s - test_strike) * oi_data[s]["pe_oi"]
+                if total_pain < min_pain:
+                    min_pain = total_pain
+                    max_pain_strike = test_strike
+
+            broad_pcr = round(total_pe_oi / total_ce_oi, 2) if total_ce_oi > 0 else None
+            
+            return {
+                "pcr": broad_pcr,
+                "max_pain": max_pain_strike,
+                "highest_ce_strike": highest_ce_oi["strike"],
+                "highest_pe_strike": highest_pe_oi["strike"]
+            }
     except Exception as e:
-        print(f"Error fetching Live OI from Angel: {e}")
+        print(f"Error fetching Advanced Live OI from Angel: {e}")
         
     return None
 
