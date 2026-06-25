@@ -2,7 +2,16 @@ import os
 import yfinance as yf
 import pandas as pd
 import pyotp
+import requests
 from SmartApi import SmartConnect
+
+# Setup custom session to bypass Yahoo Finance rate-limiting on Render
+session = requests.Session()
+session.headers.update({
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5'
+})
 
 # -------------------------------------------------------------
 # SECURE ENVIRONMENT VARIABLES (Do NOT hardcode passwords here!)
@@ -38,10 +47,10 @@ def fetch_market_data(ticker_symbol="^NSEI", interval="15m", period="5d"):
         # We initialize Angel session in the background for future Options/Tick data extensions
         angel_session = get_angel_session()
 
-        ticker = yf.Ticker(ticker_symbol)
+        ticker = yf.Ticker(ticker_symbol, session=session)
         df = ticker.history(period=period, interval=interval)
         if df.empty:
-            ticker = yf.Ticker("SPY")
+            ticker = yf.Ticker("SPY", session=session)
             df = ticker.history(period=period, interval=interval)
         return df
     except Exception as e:
@@ -50,9 +59,15 @@ def fetch_market_data(ticker_symbol="^NSEI", interval="15m", period="5d"):
 
 def fetch_news(ticker_symbol="^NSEI"):
     try:
-        ticker = yf.Ticker(ticker_symbol)
+        ticker = yf.Ticker(ticker_symbol, session=session)
         news_items = ticker.news
-        headlines = [item['title'] for item in news_items] if news_items else []
+        headlines = []
+        if news_items:
+            for item in news_items:
+                # Safely extract title, handle missing keys
+                title = item.get('title')
+                if title:
+                    headlines.append(title)
         
         if not headlines:
             headlines = [
