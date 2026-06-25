@@ -230,7 +230,34 @@ def generate_signals(ticker="^NSEI"):
             elif current_price > (oi_metrics['max_pain'] + tech_data['atr']):
                 confidence -= 5 # Price above max pain, gravitate down
 
-    # 8. ADX Choppy Market Filter (OVERRIDE)
+    # 8. Volume PCR & Option Premium Momentum (Angel One VWAP) (Max +/- 25)
+    vpcr = None
+    if oi_metrics:
+        total_ce_vol = oi_metrics.get('total_ce_vol', 0)
+        total_pe_vol = oi_metrics.get('total_pe_vol', 0)
+        if total_ce_vol > 0:
+            vpcr = round(total_pe_vol / total_ce_vol, 2)
+            if vpcr > 1.2: confidence += 10
+            elif vpcr < 0.8: confidence -= 10
+            
+        atm_ce_ltp = oi_metrics.get('atm_ce_ltp', 0)
+        atm_ce_vwap = oi_metrics.get('atm_ce_vwap', 0)
+        atm_pe_ltp = oi_metrics.get('atm_pe_ltp', 0)
+        atm_pe_vwap = oi_metrics.get('atm_pe_vwap', 0)
+        
+        # CE VWAP Momentum (Bullish)
+        if atm_ce_ltp > 0 and atm_ce_vwap > 0 and atm_ce_ltp > atm_ce_vwap:
+            confidence += 5 # Calls are trading above VWAP
+        elif atm_ce_ltp > 0 and atm_ce_vwap > 0 and atm_ce_ltp < atm_ce_vwap:
+            confidence -= 5 # Calls are fading
+            
+        # PE VWAP Momentum (Bearish)
+        if atm_pe_ltp > 0 and atm_pe_vwap > 0 and atm_pe_ltp > atm_pe_vwap:
+            confidence -= 10 # Puts are aggressively bought (Bearish for market)
+        elif atm_pe_ltp > 0 and atm_pe_vwap > 0 and atm_pe_ltp < atm_pe_vwap:
+            confidence += 5 # Puts are fading
+
+    # 9. ADX Choppy Market Filter (OVERRIDE)
     market_condition = "Trending"
     if tech_data['adx'] < 20:
         confidence -= 50 
@@ -272,6 +299,7 @@ def generate_signals(ticker="^NSEI"):
         "rsi": tech_data['rsi'],
         "confidence_score": int(confidence),
         "pcr": pcr,
+        "vpcr": vpcr,
         "max_pain": oi_metrics['max_pain'] if oi_metrics else None,
         "chart_pattern": tech_data['chart_pattern'],
         "action": action,
