@@ -458,7 +458,12 @@
                 const signalBox = document.getElementById('signalBox');
                 signalBox.className = 'signal-box ' + data.action.toLowerCase();
                 document.getElementById('actionText').innerText = data.action;
-                document.getElementById('strikeText').innerText = data.action === 'WAIT' ? 'No Trade Recommended' : data.strike_recommendation;
+                
+                const strikeElem = document.getElementById('strikeText');
+                strikeElem.innerText = data.action === 'WAIT' ? 'No Trade Recommended' : data.strike_recommendation;
+                if (data.strike_recommendation.includes('CE')) strikeElem.className = 'strike-text bullish';
+                else if (data.strike_recommendation.includes('PE')) strikeElem.className = 'strike-text bearish';
+                else strikeElem.className = 'strike-text';
 
                 document.getElementById('entryVal').innerText = data.entry_level > 0 ? data.entry_level : '--';
                 document.getElementById('targetVal').innerText = data.target > 0 ? data.target : '--';
@@ -476,15 +481,17 @@
                 }
                 
                 // FII/DII
-                document.getElementById('fiiVal').innerText = data.fii_net ? data.fii_net : '--';
-                if (data.fii_net > 0) document.getElementById('fiiVal').className = 'stat-value bullish';
-                else if (data.fii_net < 0) document.getElementById('fiiVal').className = 'stat-value bearish';
-                else document.getElementById('fiiVal').className = 'stat-value';
+                const fiiElem = document.getElementById('fiiVal');
+                fiiElem.innerText = data.fii_net ? data.fii_net : '--';
+                if (data.fii_net > 0) fiiElem.className = 'stat-value bullish';
+                else if (data.fii_net < 0) fiiElem.className = 'stat-value bearish';
+                else fiiElem.className = 'stat-value';
                 
-                document.getElementById('diiVal').innerText = data.dii_net ? data.dii_net : '--';
-                if (data.dii_net > 0) document.getElementById('diiVal').className = 'stat-value bullish';
-                else if (data.dii_net < 0) document.getElementById('diiVal').className = 'stat-value bearish';
-                else document.getElementById('diiVal').className = 'stat-value';
+                const diiElem = document.getElementById('diiVal');
+                diiElem.innerText = data.dii_net ? data.dii_net : '--';
+                if (data.dii_net > 0) diiElem.className = 'stat-value bullish';
+                else if (data.dii_net < 0) diiElem.className = 'stat-value bearish';
+                else diiElem.className = 'stat-value';
                 
                 const pcrElem = document.getElementById('pcrVal');
                 let pcrText = '-- / --';
@@ -502,8 +509,17 @@
                 pcrElem.innerText = pcrText;
                 pcrElem.className = 'stat-value ' + pcrClass;
 
-                document.getElementById('sentimentVal').innerText = data.sentiment_score;
-                document.getElementById('trendVal').innerText = data.tech_trend;
+                const sentimentElem = document.getElementById('sentimentVal');
+                sentimentElem.innerText = data.sentiment_score;
+                if (data.sentiment_score > 0) sentimentElem.className = 'stat-value bullish';
+                else if (data.sentiment_score < 0) sentimentElem.className = 'stat-value bearish';
+                else sentimentElem.className = 'stat-value';
+
+                const trendElem = document.getElementById('trendVal');
+                trendElem.innerText = data.tech_trend;
+                if (data.tech_trend.includes('Bullish')) trendElem.className = 'stat-value bullish';
+                else if (data.tech_trend.includes('Bearish')) trendElem.className = 'stat-value bearish';
+                else trendElem.className = 'stat-value';
                 
                 const patternElem = document.getElementById('patternVal');
                 patternElem.innerText = data.chart_pattern || 'None';
