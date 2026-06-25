@@ -296,10 +296,14 @@
                 </div>
             </div>
 
-            <div class="stats-grid">
+            <div class="stats-grid" style="grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 2rem;">
                 <div class="stat-card">
                     <div class="stat-label">AI Confidence</div>
                     <div id="confidenceVal" class="stat-value">-- / 100</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Options OI (PCR)</div>
+                    <div id="pcrVal" class="stat-value">--</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">News Sentiment</div>
@@ -308,10 +312,6 @@
                 <div class="stat-card">
                     <div class="stat-label">Tech Trend</div>
                     <div id="trendVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Current Price</div>
-                    <div id="priceVal" class="stat-value">--</div>
                 </div>
             </div>
 
@@ -415,9 +415,16 @@
                 document.getElementById('stopVal').innerText = data.stop_loss > 0 ? data.stop_loss : '--';
 
                 document.getElementById('confidenceVal').innerText = data.confidence_score + ' / 100';
+                
+                let pcrText = "N/A (No Login)";
+                if (data.pcr !== null && data.pcr !== undefined) {
+                    pcrText = data.pcr + (data.pcr > 1 ? " (Bullish)" : (data.pcr < 0.8 ? " (Bearish)" : " (Neutral)"));
+                }
+                const pcrElem = document.getElementById('pcrVal');
+                if(pcrElem) pcrElem.innerText = pcrText;
+
                 document.getElementById('sentimentVal').innerText = data.sentiment_score;
                 document.getElementById('trendVal').innerText = data.tech_trend;
-                document.getElementById('priceVal').innerText = data.current_price;
 
                 document.getElementById('timestamp').innerText = "Last Updated: " + new Date().toLocaleTimeString();
 
