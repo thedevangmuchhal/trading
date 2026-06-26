@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trading Dashboard — NIFTY Options Signal Engine</title>
-    <meta name="description" content="Real-time trading signals for NIFTY, BANKNIFTY options with OI analysis, Smart Money tracking, and technical confluence scoring.">
+    <title>AI Trading Dashboard — NIFTY Options Signal Engine</title>
+    <meta name="description" content="Real-time AI-powered trading signals for NIFTY, BANKNIFTY options with OI analysis, Smart Money tracking, and technical confluence scoring.">
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
@@ -26,6 +26,8 @@
             --glass-border: rgba(255, 255, 255, 0.06);
             --text-primary: #E8ECF4;
             --text-secondary: #8A95AA;
+            --purple: #8B5CF6;
+            --purple-dim: rgba(139, 92, 246, 0.12);
         }
 
         /* ═══════════════════════════════════════════
@@ -171,7 +173,7 @@
            LAYOUT
            ═══════════════════════════════════════════ */
         .dashboard {
-            max-width: 1280px;
+            max-width: 1360px;
             margin: 0 auto;
             padding: 1rem 1.25rem 2rem;
         }
@@ -364,7 +366,77 @@
         .strike-text.bearish { color: var(--bear); }
 
         /* ═══════════════════════════════════════════
-           ARC CONFIDENCE GAUGE (signature element)
+           SIGNAL STRENGTH METER
+           ═══════════════════════════════════════════ */
+        .signal-strength-container {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.6rem 0.75rem;
+            margin-bottom: 0.75rem;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+        }
+        .signal-strength-label {
+            font-size: 0.6rem;
+            color: var(--fog);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            white-space: nowrap;
+            font-weight: 600;
+        }
+        .signal-strength-bar {
+            flex: 1;
+            height: 8px;
+            background: rgba(255,255,255,0.04);
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        .signal-strength-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.8s ease, background 0.4s ease;
+            background: linear-gradient(90deg, var(--ember), var(--bull));
+        }
+        .signal-strength-val {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: var(--text-primary);
+            min-width: 32px;
+            text-align: right;
+        }
+
+        /* ═══════════════════════════════════════════
+           EXPECTED MOVE BADGE
+           ═══════════════════════════════════════════ */
+        .expected-move {
+            display: flex;
+            justify-content: center;
+            gap: 1.5rem;
+            padding: 0.5rem 0;
+            margin-bottom: 0.75rem;
+            font-size: 0.7rem;
+        }
+        .expected-move-item {
+            text-align: center;
+        }
+        .expected-move-lbl {
+            font-size: 0.55rem;
+            color: var(--fog);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        .expected-move-val {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.85rem;
+            font-weight: 500;
+        }
+
+        /* ═══════════════════════════════════════════
+           ARC CONFIDENCE GAUGE
            ═══════════════════════════════════════════ */
         .gauge-container {
             display: flex;
@@ -377,6 +449,7 @@
             width: 200px;
             height: 115px;
             overflow: visible;
+            filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.15));
         }
         .gauge-label {
             font-size: 0.6rem;
@@ -431,7 +504,7 @@
            ═══════════════════════════════════════════ */
         .levels {
             display: grid;
-            grid-template-columns: repeat(4, 1fr);
+            grid-template-columns: repeat(5, 1fr);
             gap: 0.5rem;
             margin-bottom: 1rem;
         }
@@ -458,13 +531,79 @@
         .level-val.bearish { color: var(--bear); }
 
         /* ═══════════════════════════════════════════
+           TIMEFRAME TABS
+           ═══════════════════════════════════════════ */
+        .tf-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 0.5rem;
+        }
+        .tf-tab {
+            padding: 0.4rem 0.9rem;
+            font-size: 0.7rem;
+            font-weight: 600;
+            font-family: 'DM Mono', monospace;
+            border: 1px solid var(--rim);
+            border-radius: 6px;
+            background: transparent;
+            color: var(--fog);
+            cursor: pointer;
+            transition: all 0.2s;
+            letter-spacing: 0.5px;
+        }
+        .tf-tab:hover {
+            border-color: var(--ember);
+            color: var(--text-primary);
+        }
+        .tf-tab.active {
+            background: var(--ember-dim);
+            border-color: var(--ember);
+            color: var(--ember);
+        }
+
+        /* ═══════════════════════════════════════════
            CHART
            ═══════════════════════════════════════════ */
         #priceChart {
-            height: 320px;
+            height: 340px;
             border-radius: 8px;
             overflow: hidden;
         }
+
+        /* ═══════════════════════════════════════════
+           MTF MINI TABLE
+           ═══════════════════════════════════════════ */
+        .mtf-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.68rem;
+        }
+        .mtf-table th {
+            font-size: 0.55rem;
+            color: var(--fog);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            padding: 0.4rem 0.3rem;
+            text-align: center;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .mtf-table td {
+            padding: 0.35rem 0.3rem;
+            text-align: center;
+            font-family: 'DM Mono', monospace;
+            font-weight: 500;
+            border-bottom: 1px solid rgba(255,255,255,0.02);
+        }
+        .mtf-table tr:last-child td { border-bottom: none; }
+        .mtf-table .tf-label {
+            color: var(--fog);
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+        }
+        .mtf-bull { color: var(--bull); }
+        .mtf-bear { color: var(--bear); }
+        .mtf-neutral { color: var(--fog); }
 
         /* ═══════════════════════════════════════════
            OI CHART — BIDIRECTIONAL
@@ -587,6 +726,159 @@
         }
 
         /* ═══════════════════════════════════════════
+           PAPER TRADING PANEL
+           ═══════════════════════════════════════════ */
+        .paper-trade-panel {
+            margin-bottom: 1rem;
+        }
+        .trade-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+        }
+        .trade-btn {
+            padding: 0.9rem;
+            border: none;
+            border-radius: 10px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.85rem;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.2s;
+            letter-spacing: 0.5px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.2rem;
+        }
+        .trade-btn:hover {
+            transform: translateY(-2px);
+        }
+        .trade-btn.buy-ce {
+            background: linear-gradient(135deg, #059669, #10B981);
+            color: white;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.25);
+        }
+        .trade-btn.buy-ce:hover {
+            box-shadow: 0 8px 25px rgba(16, 185, 129, 0.35);
+        }
+        .trade-btn.buy-pe {
+            background: linear-gradient(135deg, #DC2626, #EF4444);
+            color: white;
+            box-shadow: 0 4px 15px rgba(239, 68, 68, 0.25);
+        }
+        .trade-btn.buy-pe:hover {
+            box-shadow: 0 8px 25px rgba(239, 68, 68, 0.35);
+        }
+        .trade-btn-price {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.7rem;
+            opacity: 0.85;
+        }
+        .trade-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+        }
+
+        .lot-size-row {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            margin-bottom: 0.75rem;
+            font-size: 0.7rem;
+            color: var(--fog);
+        }
+        .lot-size-row label {
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.6rem;
+        }
+        .lot-size-row input {
+            width: 60px;
+            padding: 0.35rem 0.5rem;
+            border-radius: 6px;
+            border: 1px solid var(--rim);
+            background: var(--surface);
+            color: var(--text-primary);
+            font-family: 'DM Mono', monospace;
+            font-size: 0.8rem;
+            text-align: center;
+            outline: none;
+        }
+        .lot-size-row input:focus { border-color: var(--ember); }
+
+        /* Paper trades table */
+        .paper-trades-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.68rem;
+        }
+        .paper-trades-table th {
+            font-size: 0.55rem;
+            color: var(--fog);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            padding: 0.4rem 0.3rem;
+            text-align: center;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .paper-trades-table td {
+            padding: 0.4rem 0.3rem;
+            text-align: center;
+            font-family: 'DM Mono', monospace;
+            font-weight: 500;
+            border-bottom: 1px solid rgba(255,255,255,0.02);
+            font-size: 0.68rem;
+        }
+        .paper-trades-table tr:last-child td { border-bottom: none; }
+
+        .close-trade-btn {
+            padding: 0.25rem 0.6rem;
+            border: 1px solid var(--bear);
+            background: var(--bear-dim);
+            color: var(--bear);
+            border-radius: 4px;
+            font-size: 0.6rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+        .close-trade-btn:hover {
+            background: var(--bear);
+            color: white;
+        }
+
+        .pnl-positive { color: var(--bull); }
+        .pnl-negative { color: var(--bear); }
+
+        .total-pnl-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0.3rem;
+            margin-top: 0.5rem;
+            border-top: 1px solid var(--glass-border);
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .total-pnl-label {
+            color: var(--fog);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.6rem;
+        }
+        .total-pnl-val {
+            font-family: 'DM Mono', monospace;
+            font-size: 1rem;
+            font-weight: 700;
+        }
+
+        /* ═══════════════════════════════════════════
            STATS GRID
            ═══════════════════════════════════════════ */
         .stats-grid {
@@ -597,6 +889,7 @@
         }
         @media (max-width: 768px) {
             .stats-grid { grid-template-columns: repeat(3, 1fr); }
+            .levels { grid-template-columns: repeat(3, 1fr); }
         }
 
         .stat-card {
@@ -605,6 +898,11 @@
             padding: 0.7rem 0.5rem;
             border-radius: 8px;
             text-align: center;
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .stat-card:hover {
+            border-color: rgba(255,255,255,0.1);
+            background: rgba(15, 21, 34, 0.9);
         }
         .stat-label {
             font-size: 0.55rem;
@@ -622,6 +920,75 @@
         }
         .stat-value.bullish { color: var(--bull); }
         .stat-value.bearish { color: var(--bear); }
+
+        /* ═══════════════════════════════════════════
+           ADVANCED LEVELS TABLE
+           ═══════════════════════════════════════════ */
+        .advanced-levels-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+        @media (max-width: 768px) {
+            .advanced-levels-grid { grid-template-columns: 1fr; }
+        }
+        .levels-mini-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .levels-mini-table th {
+            font-size: 0.55rem;
+            color: var(--fog);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-weight: 600;
+            padding: 0.35rem 0.3rem;
+            text-align: left;
+            border-bottom: 1px solid var(--glass-border);
+        }
+        .levels-mini-table td {
+            padding: 0.3rem 0.3rem;
+            font-family: 'DM Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 500;
+            border-bottom: 1px solid rgba(255,255,255,0.02);
+        }
+        .levels-mini-table td:last-child {
+            text-align: right;
+        }
+        .level-name {
+            color: var(--fog);
+            font-family: 'Inter', sans-serif;
+            font-size: 0.65rem;
+        }
+
+        /* ═══════════════════════════════════════════
+           STRATEGY PERFORMANCE CARD
+           ═══════════════════════════════════════════ */
+        .perf-stats-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 0.5rem;
+        }
+        .perf-stat {
+            text-align: center;
+            padding: 0.5rem 0.3rem;
+            background: rgba(255,255,255,0.02);
+            border-radius: 6px;
+            border: 1px solid var(--glass-border);
+        }
+        .perf-stat-label {
+            font-size: 0.5rem;
+            color: var(--fog);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 0.2rem;
+        }
+        .perf-stat-val {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
 
         /* ═══════════════════════════════════════════
            NEWS FEED
@@ -650,6 +1017,21 @@
         }
         .news-dot.positive { background: var(--bull); }
         .news-dot.negative { background: var(--bear); }
+
+        /* ═══════════════════════════════════════════
+           SIGNAL REASONS LIST
+           ═══════════════════════════════════════════ */
+        .signal-reasons-list {
+            list-style: none;
+            padding: 0;
+        }
+        .signal-reasons-list li {
+            font-size: 0.72rem;
+            padding: 0.3rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.02);
+            line-height: 1.5;
+        }
+        .signal-reasons-list li:last-child { border-bottom: none; }
 
         /* ═══════════════════════════════════════════
            REFRESH BUTTON
@@ -719,25 +1101,6 @@
         }
 
         /* ═══════════════════════════════════════════
-           CONFIDENCE LABEL
-           ═══════════════════════════════════════════ */
-        .confidence-label {
-            font-size: 0.65rem;
-            font-weight: 700;
-            letter-spacing: 1.5px;
-            text-transform: uppercase;
-            text-align: center;
-            margin-top: 0.15rem;
-        }
-
-        /* ═══════════════════════════════════════════
-           GAUGE GLOW
-           ═══════════════════════════════════════════ */
-        .gauge-svg {
-            filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.15));
-        }
-
-        /* ═══════════════════════════════════════════
            STAT SECTION HEADERS
            ═══════════════════════════════════════════ */
         .stat-section {
@@ -750,20 +1113,34 @@
             letter-spacing: 1.5px;
             font-weight: 600;
             margin-bottom: 0.4rem;
-            padding-left: 0.25rem;
-            border-left: 2px solid var(--ember);
             padding-left: 0.5rem;
+            border-left: 2px solid var(--ember);
         }
 
         /* ═══════════════════════════════════════════
-           CARD HOVER
+           TRADE HISTORY TABS
            ═══════════════════════════════════════════ */
-        .stat-card {
-            transition: border-color 0.2s, background 0.2s;
+        .trade-tabs {
+            display: flex;
+            gap: 4px;
+            margin-bottom: 0.5rem;
         }
-        .stat-card:hover {
-            border-color: rgba(255,255,255,0.1);
-            background: rgba(15, 21, 34, 0.9);
+        .trade-tab {
+            padding: 0.35rem 0.75rem;
+            font-size: 0.65rem;
+            font-weight: 600;
+            border: 1px solid var(--rim);
+            border-radius: 6px;
+            background: transparent;
+            color: var(--fog);
+            cursor: pointer;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+        .trade-tab.active {
+            background: var(--purple-dim);
+            border-color: var(--purple);
+            color: var(--purple);
         }
 
     </style>
@@ -821,13 +1198,43 @@
             <!-- ═══════ TWO-COLUMN LAYOUT ═══════ -->
             <div class="main-grid">
 
-                <!-- LEFT COLUMN: Chart + OI -->
+                <!-- LEFT COLUMN: Chart + MTF + OI -->
                 <div class="left-col">
+
+                    <!-- Chart Card with TF Tabs -->
                     <div class="card" style="margin-bottom: 1rem;">
-                        <div class="card-title">Price Action — 15m Candles</div>
+                        <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:0.5rem;">
+                            <div class="card-title" id="chartTitle" style="margin-bottom:0;">Price Action — 15m Candles</div>
+                            <div class="tf-tabs" id="tfTabs">
+                                <button class="tf-tab" data-tf="5m" onclick="switchTimeframe('5m')">5m</button>
+                                <button class="tf-tab active" data-tf="15m" onclick="switchTimeframe('15m')">15m</button>
+                                <button class="tf-tab" data-tf="30m" onclick="switchTimeframe('30m')">30m</button>
+                                <button class="tf-tab" data-tf="1h" onclick="switchTimeframe('1h')">1h</button>
+                            </div>
+                        </div>
                         <div id="priceChart"></div>
                     </div>
 
+                    <!-- MTF Confluence Table -->
+                    <div class="card" id="mtfTableCard" style="margin-bottom: 1rem;">
+                        <div class="card-title">Multi-Timeframe Confluence</div>
+                        <table class="mtf-table" id="mtfTable">
+                            <thead>
+                                <tr>
+                                    <th>TF</th>
+                                    <th>Trend</th>
+                                    <th>RSI</th>
+                                    <th>Supertrend</th>
+                                    <th>Stoch K</th>
+                                </tr>
+                            </thead>
+                            <tbody id="mtfTableBody">
+                                <!-- Populated by JS -->
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- OI Chart -->
                     <div class="card" id="oiChartCard" style="display: none;">
                         <div class="card-title">Open Interest — Strike-wise</div>
                         <div id="oiChart"></div>
@@ -844,13 +1251,38 @@
                     </div>
                 </div>
 
-                <!-- RIGHT COLUMN: Signal + Gauge + Scores + Levels -->
+                <!-- RIGHT COLUMN: Signal + Gauge + Scores + Levels + Paper Trade -->
                 <div class="right-col">
 
                     <!-- Signal Box -->
                     <div id="signalBox" class="signal-box wait">
                         <h2 id="actionText" class="action-text">WAIT</h2>
                         <div id="strikeText" class="strike-text">No trade recommended</div>
+                    </div>
+
+                    <!-- Signal Strength Meter -->
+                    <div class="signal-strength-container">
+                        <span class="signal-strength-label">Signal Strength</span>
+                        <div class="signal-strength-bar">
+                            <div id="signalStrengthFill" class="signal-strength-fill" style="width:0%"></div>
+                        </div>
+                        <span id="signalStrengthVal" class="signal-strength-val">0</span>
+                    </div>
+
+                    <!-- Expected Move -->
+                    <div class="expected-move">
+                        <div class="expected-move-item">
+                            <div class="expected-move-lbl">Expected Low</div>
+                            <div id="expectedMoveLow" class="expected-move-val" style="color:var(--bear);">--</div>
+                        </div>
+                        <div class="expected-move-item">
+                            <div class="expected-move-lbl">R:R Ratio</div>
+                            <div id="riskRewardVal" class="expected-move-val" style="color:var(--ember);">--</div>
+                        </div>
+                        <div class="expected-move-item">
+                            <div class="expected-move-lbl">Expected High</div>
+                            <div id="expectedMoveHigh" class="expected-move-val" style="color:var(--bull);">--</div>
+                        </div>
                     </div>
 
                     <!-- Signal Insight -->
@@ -931,6 +1363,68 @@
                         <div class="level">
                             <div class="level-label">Price</div>
                             <div id="priceVal" class="level-val" style="color:var(--ember)">--</div>
+                        </div>
+                        <div class="level">
+                            <div class="level-label">R:R</div>
+                            <div id="rrLevelVal" class="level-val" style="color:var(--purple)">--</div>
+                        </div>
+                    </div>
+
+                    <!-- ═══════ PAPER TRADING PANEL ═══════ -->
+                    <div class="card paper-trade-panel">
+                        <div class="card-title">Paper Trading</div>
+                        <div class="lot-size-row">
+                            <label>Lot Size</label>
+                            <input type="number" id="lotSizeInput" value="25" min="1" max="5000">
+                            <span style="margin-left:auto; font-size:0.6rem;">ATM: <strong id="paperAtmStrike">--</strong></span>
+                        </div>
+                        <div class="trade-buttons">
+                            <button class="trade-btn buy-ce" id="buyCeBtn" onclick="executePaperTrade('CE')" disabled>
+                                BUY CE
+                                <span class="trade-btn-price" id="buyCePrice">₹ --</span>
+                            </button>
+                            <button class="trade-btn buy-pe" id="buyPeBtn" onclick="executePaperTrade('PE')" disabled>
+                                BUY PE
+                                <span class="trade-btn-price" id="buyPePrice">₹ --</span>
+                            </button>
+                        </div>
+
+                        <!-- Trade Tabs -->
+                        <div class="trade-tabs">
+                            <button class="trade-tab active" onclick="switchTradeView('open')">Open Positions</button>
+                            <button class="trade-tab" onclick="switchTradeView('closed')">Trade History</button>
+                        </div>
+
+                        <!-- Open Positions -->
+                        <div id="openTradesView">
+                            <table class="paper-trades-table">
+                                <thead>
+                                    <tr><th>Type</th><th>Strike</th><th>Entry</th><th>Lots</th><th>P&L</th><th></th></tr>
+                                </thead>
+                                <tbody id="openTradesBody">
+                                    <tr><td colspan="6" style="color:var(--fog); padding:1rem;">No open positions</td></tr>
+                                </tbody>
+                            </table>
+                            <div class="total-pnl-row">
+                                <span class="total-pnl-label">Total Open P&L</span>
+                                <span id="totalOpenPnl" class="total-pnl-val" style="color:var(--fog);">₹0.00</span>
+                            </div>
+                        </div>
+
+                        <!-- Trade History (hidden by default) -->
+                        <div id="closedTradesView" style="display:none;">
+                            <table class="paper-trades-table">
+                                <thead>
+                                    <tr><th>Type</th><th>Strike</th><th>Entry</th><th>Exit</th><th>P&L</th></tr>
+                                </thead>
+                                <tbody id="closedTradesBody">
+                                    <tr><td colspan="5" style="color:var(--fog); padding:1rem;">No closed trades</td></tr>
+                                </tbody>
+                            </table>
+                            <div class="total-pnl-row">
+                                <span class="total-pnl-label">Total Realized P&L</span>
+                                <span id="totalClosedPnl" class="total-pnl-val" style="color:var(--fog);">₹0.00</span>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1030,6 +1524,74 @@
                 </div>
             </div>
 
+            <!-- ═══════ ADVANCED LEVELS ═══════ -->
+            <div class="stat-section">
+                <div class="stat-section-title">Advanced Levels</div>
+                <div class="advanced-levels-grid">
+                    <!-- Fibonacci -->
+                    <div class="card">
+                        <div class="card-title">Fibonacci Retracement</div>
+                        <table class="levels-mini-table" id="fibTable">
+                            <thead><tr><th>Level</th><th>Price</th></tr></thead>
+                            <tbody id="fibTableBody">
+                                <tr><td colspan="2" style="color:var(--fog);">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <!-- Camarilla + Key Levels -->
+                    <div class="card">
+                        <div class="card-title">Key Levels</div>
+                        <table class="levels-mini-table" id="keyLevelsTable">
+                            <thead><tr><th>Level</th><th>Price</th></tr></thead>
+                            <tbody id="keyLevelsBody">
+                                <tr><td colspan="2" style="color:var(--fog);">Loading…</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════ STRATEGY PERFORMANCE ═══════ -->
+            <div class="stat-section">
+                <div class="stat-section-title">Strategy Performance (1Y Backtest)</div>
+                <div class="card" id="perfCard">
+                    <div class="perf-stats-grid" id="perfStatsGrid">
+                        <div class="perf-stat">
+                            <div class="perf-stat-label">Win Rate</div>
+                            <div class="perf-stat-val" id="perfWinRate" style="color:var(--fog)">--</div>
+                        </div>
+                        <div class="perf-stat">
+                            <div class="perf-stat-label">Total Return</div>
+                            <div class="perf-stat-val" id="perfReturn" style="color:var(--fog)">--</div>
+                        </div>
+                        <div class="perf-stat">
+                            <div class="perf-stat-label">Max Drawdown</div>
+                            <div class="perf-stat-val" id="perfDrawdown" style="color:var(--fog)">--</div>
+                        </div>
+                        <div class="perf-stat">
+                            <div class="perf-stat-label">Sharpe Ratio</div>
+                            <div class="perf-stat-val" id="perfSharpe" style="color:var(--fog)">--</div>
+                        </div>
+                        <div class="perf-stat">
+                            <div class="perf-stat-label">Total Trades</div>
+                            <div class="perf-stat-val" id="perfTrades" style="color:var(--fog)">--</div>
+                        </div>
+                        <div class="perf-stat">
+                            <div class="perf-stat-label">Avg Trade</div>
+                            <div class="perf-stat-val" id="perfAvgTrade" style="color:var(--fog)">--</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ═══════ SIGNAL REASONS ═══════ -->
+            <div class="card" style="margin-bottom: 1rem;">
+                <div class="card-title">Signal Reasoning</div>
+                <ul class="signal-reasons-list" id="signalReasonsList">
+                    <li>Scanning…</li>
+                </ul>
+            </div>
+
             <!-- ═══════ NEWS FEED ═══════ -->
             <div class="card news-feed" style="margin-bottom: 1rem;">
                 <div class="card-title">Market Headlines</div>
@@ -1050,43 +1612,39 @@
         let lastAction = "WAIT";
         let priceChart = null;
         let candleSeries = null;
+        let vwapLine = null;
+        let ema9Line = null;
+        let ema21Line = null;
         let lastCandles = [];   // cache for sparkline
+        let currentInterval = "15m";
+        let cachedSignalData = null;  // store signal data for chart overlays
+        let cachedOiData = null;
+
+        // Paper trading state
+        let paperTrades = [];
 
         // ── Market Hours (IST) ──────────────────────
         function computeMarketStatus() {
             const now = new Date();
-            // Convert to IST
             const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
             const ist = new Date(utc + (5.5 * 3600000));
             const h = ist.getHours();
             const m = ist.getMinutes();
-            const day = ist.getDay(); // 0 = Sun, 6 = Sat
+            const day = ist.getDay();
             const totalMins = h * 60 + m;
 
-            // NSE Holidays 2026 (abridged for current context, can be expanded)
             const nseHolidays = [
-                '2026-01-26', // Republic Day
-                '2026-03-03', // Maha Shivaratri
-                '2026-03-24', // Holi
-                '2026-04-02', // Mahavir Jayanti
-                '2026-04-10', // Good Friday
-                '2026-04-14', // Dr. Baba Saheb Ambedkar Jayanti
-                '2026-05-01', // Maharashtra Day
-                '2026-06-26', // Custom/Unscheduled Holiday (Today)
-                '2026-08-15', // Independence Day
-                '2026-09-19', // Ganesh Chaturthi
-                '2026-10-02', // Mahatma Gandhi Jayanti
-                '2026-10-21', // Dussehra
-                '2026-11-09', // Diwali
-                '2026-11-23', // Gurunanak Jayanti
-                '2026-12-25'  // Christmas
+                '2026-01-26','2026-03-03','2026-03-24','2026-04-02',
+                '2026-04-10','2026-04-14','2026-05-01','2026-08-15',
+                '2026-09-19','2026-10-02','2026-10-21','2026-11-09',
+                '2026-11-23','2026-12-25'
             ];
 
             const dateString = ist.toISOString().split('T')[0];
             if (nseHolidays.includes(dateString)) return 'closed';
             if (day === 0 || day === 6) return 'closed';
-            if (totalMins >= 555 && totalMins < 930) return 'live';     // 9:15 AM — 3:30 PM
-            if (totalMins >= 540 && totalMins < 555) return 'pre';      // 9:00 — 9:15
+            if (totalMins >= 555 && totalMins < 930) return 'live';
+            if (totalMins >= 540 && totalMins < 555) return 'pre';
             return 'closed';
         }
 
@@ -1137,7 +1695,7 @@
 
         // ── Arc Gauge ───────────────────────────────
         function renderArcGauge(score) {
-            const ARC_LENGTH = 251.3; // half-circle circumference for r=80
+            const ARC_LENGTH = 251.3;
             const fillEl = document.getElementById('gaugeFill');
             const needleEl = document.getElementById('gaugeNeedle');
             const valueEl = document.getElementById('gaugeValue');
@@ -1146,10 +1704,8 @@
             const clamped = Math.max(0, Math.min(100, score));
             const fraction = clamped / 100;
 
-            // Stroke offset
             fillEl.setAttribute('stroke-dashoffset', ARC_LENGTH * (1 - fraction));
 
-            // Colour + label
             let color, label;
             if (clamped >= 85) { color = 'var(--bull)'; label = 'STRONG BUY'; }
             else if (clamped >= 70) { color = 'var(--bull)'; label = 'BUY BIAS'; }
@@ -1163,67 +1719,138 @@
             labelEl.textContent = label;
             labelEl.setAttribute('fill', color);
 
-            // Gauge SVG glow matches colour
             const gaugeEl = document.getElementById('gaugeArc');
             if (clamped >= 70) gaugeEl.style.filter = 'drop-shadow(0 0 12px rgba(16, 185, 129, 0.25))';
             else if (clamped <= 30) gaugeEl.style.filter = 'drop-shadow(0 0 12px rgba(239, 68, 68, 0.25))';
             else gaugeEl.style.filter = 'drop-shadow(0 0 8px rgba(245, 158, 11, 0.15))';
 
-            // Needle rotation: -90° (left) to +90° (right)
             const angle = -90 + (fraction * 180);
             needleEl.style.transform = `rotate(${angle}deg)`;
-
-            // Value
             valueEl.textContent = clamped;
+        }
+
+        // ── Signal Strength ─────────────────────────
+        function renderSignalStrength(strength) {
+            const val = Math.max(0, Math.min(10, strength || 0));
+            const pct = val * 10;
+            const fill = document.getElementById('signalStrengthFill');
+            fill.style.width = pct + '%';
+            if (val >= 7) fill.style.background = 'linear-gradient(90deg, #059669, var(--bull))';
+            else if (val >= 4) fill.style.background = 'linear-gradient(90deg, var(--ember), #FBBF24)';
+            else fill.style.background = 'linear-gradient(90deg, #DC2626, var(--bear))';
+            document.getElementById('signalStrengthVal').textContent = val + '/10';
         }
 
         // ── Signal Insight Generation ────────────────
         function generateSignalInsight(data) {
             const parts = [];
-            
-            // Trend
             if (data.tech_trend) {
                 if (data.tech_trend.includes('Bullish')) parts.push('Price action is <strong>bullish</strong>');
                 else if (data.tech_trend.includes('Bearish')) parts.push('Price action is <strong>bearish</strong>');
             }
-            
-            // MTF
             if (data.mtf_confluence) {
                 const match = data.mtf_confluence.match(/(\d+)B\/(\d+)S/);
                 if (match) {
                     const b = parseInt(match[1]), s = parseInt(match[2]);
-                    if (b >= 3) parts.push('all timeframes aligned bullish');
-                    else if (s >= 3) parts.push('all timeframes aligned bearish');
-                    else if (b === 2) parts.push('higher TFs bullish — pullback possible');
-                    else if (s === 2) parts.push('higher TFs bearish — bounce possible');
+                    if (b >= 4) parts.push(`<strong>${b}/5</strong> timeframes bullish`);
+                    else if (s >= 4) parts.push(`<strong>${s}/5</strong> timeframes bearish`);
+                    else if (b === 3) parts.push('3/5 TFs bullish — wait for confirmation');
+                    else if (s === 3) parts.push('3/5 TFs bearish — pullback possible');
                 }
             }
-
-            // RSI zone
             if (data.rsi < 30) parts.push('RSI <strong>oversold</strong> (' + data.rsi + ')');
             else if (data.rsi > 70) parts.push('RSI <strong>overbought</strong> (' + data.rsi + ')');
-
-            // Divergence
             if (data.rsi_divergence === 'bullish') parts.push('<strong>bullish RSI divergence</strong> detected');
             else if (data.rsi_divergence === 'bearish') parts.push('<strong>bearish RSI divergence</strong> detected');
-
-            // Supertrend
             if (data.supertrend_direction === 'Bullish') parts.push('Supertrend supports upside');
             else if (data.supertrend_direction === 'Bearish') parts.push('Supertrend confirms downside');
-
-            // Volume
             if (data.volume_surge) parts.push('volume surge at <strong>' + data.volume_ratio + 'x</strong> average');
-
-            // Smart Money
             if (data.smart_money_score >= 80) parts.push('FII+DII <strong>strong buying</strong>');
             else if (data.smart_money_score <= 20) parts.push('FII+DII <strong>heavy selling</strong>');
-
-            // IV Crush
             if (data.iv_crush_warning) parts.push('⚡ <strong>IV crush</strong> — premiums decaying');
-
             if (parts.length === 0) parts.push('Waiting for stronger confluence across indicators');
-            
             return parts.join(' · ');
+        }
+
+        // ── MTF Table ───────────────────────────────
+        function renderMTFTable(mtfMatrix) {
+            const body = document.getElementById('mtfTableBody');
+            if (!mtfMatrix) { body.innerHTML = '<tr><td colspan="5" style="color:var(--fog)">No data</td></tr>'; return; }
+
+            const tfs = ['5m', '15m', '30m', '1h', '4h'];
+            let html = '';
+            tfs.forEach(tf => {
+                const d = mtfMatrix[tf];
+                if (!d) return;
+                const trendClass = d.trend === 'Bullish' ? 'mtf-bull' : d.trend === 'Bearish' ? 'mtf-bear' : 'mtf-neutral';
+                const stClass = d.supertrend === 'Bullish' ? 'mtf-bull' : d.supertrend === 'Bearish' ? 'mtf-bear' : 'mtf-neutral';
+                const rsiClass = d.rsi < 35 ? 'mtf-bear' : d.rsi > 65 ? 'mtf-bull' : 'mtf-neutral';
+                const skClass = d.stoch_k < 20 ? 'mtf-bear' : d.stoch_k > 80 ? 'mtf-bull' : 'mtf-neutral';
+                html += `<tr>
+                    <td class="tf-label">${tf.toUpperCase()}</td>
+                    <td class="${trendClass}">${d.trend === 'Bullish' ? '▲ Bull' : d.trend === 'Bearish' ? '▼ Bear' : '— Neutral'}</td>
+                    <td class="${rsiClass}">${typeof d.rsi === 'number' ? d.rsi.toFixed(1) : d.rsi}</td>
+                    <td class="${stClass}">${d.supertrend === 'Bullish' ? '▲' : d.supertrend === 'Bearish' ? '▼' : '—'}</td>
+                    <td class="${skClass}">${typeof d.stoch_k === 'number' ? d.stoch_k.toFixed(1) : d.stoch_k}</td>
+                </tr>`;
+            });
+            body.innerHTML = html;
+        }
+
+        // ── Fibonacci Table ─────────────────────────
+        function renderFibTable(fib) {
+            const body = document.getElementById('fibTableBody');
+            if (!fib || Object.keys(fib).length === 0) {
+                body.innerHTML = '<tr><td colspan="2" style="color:var(--fog)">No data</td></tr>';
+                return;
+            }
+            const labels = {
+                swing_high: 'Swing High', fib_786: '78.6%', fib_618: '61.8%',
+                fib_500: '50.0%', fib_382: '38.2%', fib_236: '23.6%', swing_low: 'Swing Low'
+            };
+            let html = '';
+            for (const [key, label] of Object.entries(labels)) {
+                if (fib[key] !== undefined) {
+                    const color = key === 'swing_high' ? 'var(--bear)' : key === 'swing_low' ? 'var(--bull)' : 'var(--text-primary)';
+                    html += `<tr><td class="level-name">${label}</td><td style="color:${color}">${fib[key]}</td></tr>`;
+                }
+            }
+            body.innerHTML = html;
+        }
+
+        // ── Key Levels Table (Camarilla + PDH/PDL + Weekly) ─
+        function renderKeyLevels(data) {
+            const body = document.getElementById('keyLevelsBody');
+            let rows = [];
+            if (data.pdh) rows.push(['Prev Day High', data.pdh, 'var(--bear)']);
+            if (data.pdl) rows.push(['Prev Day Low', data.pdl, 'var(--bull)']);
+            if (data.weekly_high) rows.push(['Weekly High', data.weekly_high, 'var(--bear)']);
+            if (data.weekly_low) rows.push(['Weekly Low', data.weekly_low, 'var(--bull)']);
+            if (data.vwap) rows.push(['VWAP', data.vwap, 'var(--ember)']);
+
+            const cam = data.camarilla || {};
+            if (cam.h4) rows.push(['Cam H4', cam.h4, 'var(--bear)']);
+            if (cam.h3) rows.push(['Cam H3', cam.h3, 'var(--bear)']);
+            if (cam.l3) rows.push(['Cam L3', cam.l3, 'var(--bull)']);
+            if (cam.l4) rows.push(['Cam L4', cam.l4, 'var(--bull)']);
+
+            if (rows.length === 0) {
+                body.innerHTML = '<tr><td colspan="2" style="color:var(--fog)">No data</td></tr>';
+                return;
+            }
+            body.innerHTML = rows.map(([label, val, color]) =>
+                `<tr><td class="level-name">${label}</td><td style="color:${color}">${val}</td></tr>`
+            ).join('');
+        }
+
+        // ── Signal Reasons ──────────────────────────
+        function renderSignalReasons(reasons) {
+            const list = document.getElementById('signalReasonsList');
+            if (!reasons || reasons.length === 0) {
+                list.innerHTML = '<li style="color:var(--fog)">No signals</li>';
+                return;
+            }
+            list.innerHTML = reasons.map(r => `<li>${r}</li>`).join('');
         }
 
         // ── OI Chart (Bidirectional) ────────────────
@@ -1281,7 +1908,7 @@
             const container = document.getElementById('priceChart');
             priceChart = LightweightCharts.createChart(container, {
                 width: container.clientWidth,
-                height: 320,
+                height: 340,
                 layout: { background: { color: '#0F1522' }, textColor: '#6B7A99' },
                 grid: {
                     vertLines: { color: 'rgba(255,255,255,0.025)' },
@@ -1296,9 +1923,155 @@
                 borderUpColor: '#10B981', borderDownColor: '#EF4444',
                 wickUpColor: '#10B981', wickDownColor: '#EF4444',
             });
-            window.addEventListener('resize', () => {
-                if (priceChart) priceChart.resize(document.getElementById('priceChart').clientWidth, 320);
+
+            // EMA lines
+            ema9Line = priceChart.addLineSeries({
+                color: 'rgba(139, 92, 246, 0.6)', lineWidth: 1, lineStyle: 0,
+                crosshairMarkerVisible: false, priceLineVisible: false,
+                lastValueVisible: false,
             });
+            ema21Line = priceChart.addLineSeries({
+                color: 'rgba(245, 158, 11, 0.5)', lineWidth: 1, lineStyle: 0,
+                crosshairMarkerVisible: false, priceLineVisible: false,
+                lastValueVisible: false,
+            });
+
+            // VWAP line
+            vwapLine = priceChart.addLineSeries({
+                color: 'rgba(59, 130, 246, 0.6)', lineWidth: 1, lineStyle: 2,
+                crosshairMarkerVisible: false, priceLineVisible: false,
+                lastValueVisible: false,
+            });
+
+            window.addEventListener('resize', () => {
+                if (priceChart) priceChart.resize(document.getElementById('priceChart').clientWidth, 340);
+            });
+        }
+
+        // ── Timeframe Switcher ──────────────────────
+        async function switchTimeframe(tf) {
+            currentInterval = tf;
+            // Update tab active states
+            document.querySelectorAll('.tf-tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`.tf-tab[data-tf="${tf}"]`).classList.add('active');
+            document.getElementById('chartTitle').textContent = `Price Action — ${tf} Candles`;
+
+            try {
+                const res = await fetch(`${API_BASE}/api/candles?ticker=${encodeURIComponent(currentTicker)}&interval=${tf}`);
+                const candleData = await res.json();
+                if (candleData.candles && candleData.candles.length > 0) {
+                    candleSeries.setData(candleData.candles);
+                    // Clear and re-add overlays
+                    ema9Line.setData([]);
+                    ema21Line.setData([]);
+                    vwapLine.setData([]);
+                    addChartOverlays(candleData.candles);
+                    addChartPriceLines();
+                    priceChart.timeScale().fitContent();
+                    if (tf === '15m') renderSparkline(candleData.candles);
+                }
+            } catch (e) {
+                console.error('TF switch error:', e);
+            }
+        }
+
+        // ── Compute EMA on candle array ─────────────
+        function computeEMA(candles, period) {
+            const result = [];
+            const k = 2 / (period + 1);
+            let ema = candles[0].close;
+            result.push({ time: candles[0].time, value: ema });
+            for (let i = 1; i < candles.length; i++) {
+                ema = candles[i].close * k + ema * (1 - k);
+                result.push({ time: candles[i].time, value: parseFloat(ema.toFixed(2)) });
+            }
+            return result;
+        }
+
+        // ── Add chart overlays (EMA, VWAP) ──────────
+        function addChartOverlays(candles) {
+            if (!candles || candles.length < 22) return;
+            ema9Line.setData(computeEMA(candles, 9));
+            ema21Line.setData(computeEMA(candles, 21));
+
+            // Compute VWAP (session-based approximation)
+            const vwapData = [];
+            let cumPV = 0, cumVol = 0;
+            for (const c of candles) {
+                const tp = (c.high + c.low + c.close) / 3;
+                cumPV += tp * c.volume;
+                cumVol += c.volume;
+                if (cumVol > 0) {
+                    vwapData.push({ time: c.time, value: parseFloat((cumPV / cumVol).toFixed(2)) });
+                }
+            }
+            if (vwapData.length > 0) vwapLine.setData(vwapData);
+        }
+
+        // ── Add price lines (PDH/PDL, Fibonacci, OI) ─
+        function addChartPriceLines() {
+            // Remove old lines
+            if (window._chartPriceLines) {
+                window._chartPriceLines.forEach(l => { try { candleSeries.removePriceLine(l); } catch(e) {} });
+            }
+            window._chartPriceLines = [];
+
+            const data = cachedSignalData;
+            const oi = cachedOiData;
+            if (!data) return;
+
+            // PDH / PDL
+            if (data.pdh) {
+                window._chartPriceLines.push(candleSeries.createPriceLine({
+                    price: data.pdh, color: '#6B7A99', lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'PDH',
+                }));
+            }
+            if (data.pdl) {
+                window._chartPriceLines.push(candleSeries.createPriceLine({
+                    price: data.pdl, color: '#6B7A99', lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'PDL',
+                }));
+            }
+
+            // Fibonacci key levels
+            const fib = data.fibonacci;
+            if (fib) {
+                if (fib.fib_618) {
+                    window._chartPriceLines.push(candleSeries.createPriceLine({
+                        price: fib.fib_618, color: 'rgba(139, 92, 246, 0.5)', lineWidth: 1,
+                        lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true, title: 'Fib 61.8%',
+                    }));
+                }
+                if (fib.fib_382) {
+                    window._chartPriceLines.push(candleSeries.createPriceLine({
+                        price: fib.fib_382, color: 'rgba(139, 92, 246, 0.5)', lineWidth: 1,
+                        lineStyle: LightweightCharts.LineStyle.Dotted, axisLabelVisible: true, title: 'Fib 38.2%',
+                    }));
+                }
+            }
+
+            // OI-based support/resistance
+            if (oi && oi.highest_ce_strike > 0) {
+                window._chartPriceLines.push(candleSeries.createPriceLine({
+                    price: oi.highest_ce_strike, color: '#EF4444', lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'Res (CE OI)',
+                }));
+            }
+            if (oi && oi.highest_pe_strike > 0) {
+                window._chartPriceLines.push(candleSeries.createPriceLine({
+                    price: oi.highest_pe_strike, color: '#10B981', lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'Sup (PE OI)',
+                }));
+            }
+
+            // VWAP price line
+            if (data.vwap) {
+                window._chartPriceLines.push(candleSeries.createPriceLine({
+                    price: data.vwap, color: 'rgba(59, 130, 246, 0.6)', lineWidth: 1,
+                    lineStyle: LightweightCharts.LineStyle.Dashed, axisLabelVisible: true, title: 'VWAP',
+                }));
+            }
         }
 
         // ── Notification ────────────────────────────
@@ -1323,6 +2096,139 @@
             return 'neutral';
         }
 
+        // ═══════════════════════════════════════════
+        // PAPER TRADING
+        // ═══════════════════════════════════════════
+
+        function switchTradeView(view) {
+            document.querySelectorAll('.trade-tab').forEach(t => t.classList.remove('active'));
+            if (view === 'open') {
+                document.getElementById('openTradesView').style.display = 'block';
+                document.getElementById('closedTradesView').style.display = 'none';
+                document.querySelectorAll('.trade-tab')[0].classList.add('active');
+            } else {
+                document.getElementById('openTradesView').style.display = 'none';
+                document.getElementById('closedTradesView').style.display = 'block';
+                document.querySelectorAll('.trade-tab')[1].classList.add('active');
+            }
+        }
+
+        async function executePaperTrade(optionType) {
+            if (!cachedSignalData) return;
+            const data = cachedSignalData;
+            const lotSize = parseInt(document.getElementById('lotSizeInput').value) || 25;
+            const strike = data.atm_strike || (Math.round(data.current_price / 100) * 100);
+            const entryPrice = optionType === 'CE' ? (data.atm_ce_ltp || 0) : (data.atm_pe_ltp || 0);
+
+            if (entryPrice <= 0) {
+                alert('Cannot trade — option price unavailable');
+                return;
+            }
+
+            try {
+                const res = await fetch(`${API_BASE}/api/paper-trade`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        ticker: currentTicker,
+                        action: 'BUY',
+                        option_type: optionType,
+                        strike: strike,
+                        entry_price: entryPrice,
+                        lot_size: lotSize,
+                        stop_loss: data.stop_loss || 0,
+                        target: data.target || 0,
+                    })
+                });
+                const trade = await res.json();
+                paperTrades.push(trade);
+                renderPaperTrades();
+            } catch (e) {
+                console.error('Paper trade error:', e);
+            }
+        }
+
+        async function closePaperTrade(tradeId) {
+            try {
+                // Get current option price (use cached or estimate)
+                const closePrice = 0; // Let backend handle
+                const res = await fetch(`${API_BASE}/api/paper-trade/${tradeId}/close?close_price=${closePrice}`, {
+                    method: 'POST'
+                });
+                const closedTrade = await res.json();
+                // Update local state
+                const idx = paperTrades.findIndex(t => t.id === tradeId);
+                if (idx >= 0) paperTrades[idx] = closedTrade;
+                renderPaperTrades();
+            } catch (e) {
+                console.error('Close trade error:', e);
+            }
+        }
+
+        async function refreshPaperTrades() {
+            try {
+                const res = await fetch(`${API_BASE}/api/paper-trades`);
+                const result = await res.json();
+                paperTrades = result.trades || [];
+                renderPaperTrades();
+            } catch (e) {
+                console.error('Refresh trades error:', e);
+            }
+        }
+
+        function renderPaperTrades() {
+            const openBody = document.getElementById('openTradesBody');
+            const closedBody = document.getElementById('closedTradesBody');
+
+            const openTrades = paperTrades.filter(t => t.status === 'OPEN');
+            const closedTrades = paperTrades.filter(t => t.status === 'CLOSED');
+
+            // Open positions
+            if (openTrades.length === 0) {
+                openBody.innerHTML = '<tr><td colspan="6" style="color:var(--fog); padding:1rem;">No open positions</td></tr>';
+            } else {
+                openBody.innerHTML = openTrades.map(t => {
+                    const pnl = ((t.current_price - t.entry_price) * t.lot_size).toFixed(2);
+                    const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                    return `<tr>
+                        <td style="color:${t.option_type === 'CE' ? 'var(--bull)' : 'var(--bear)'}">${t.option_type}</td>
+                        <td>${t.strike}</td>
+                        <td>₹${t.entry_price.toFixed(2)}</td>
+                        <td>${t.lot_size}</td>
+                        <td class="${pnlClass}">₹${pnl}</td>
+                        <td><button class="close-trade-btn" onclick="closePaperTrade('${t.id}')">Close</button></td>
+                    </tr>`;
+                }).join('');
+            }
+
+            // Total open P&L
+            const totalOpenPnl = openTrades.reduce((sum, t) => sum + (t.current_price - t.entry_price) * t.lot_size, 0);
+            const totalOpenEl = document.getElementById('totalOpenPnl');
+            totalOpenEl.textContent = '₹' + totalOpenPnl.toFixed(2);
+            totalOpenEl.className = 'total-pnl-val ' + (totalOpenPnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+
+            // Closed trades
+            if (closedTrades.length === 0) {
+                closedBody.innerHTML = '<tr><td colspan="5" style="color:var(--fog); padding:1rem;">No closed trades</td></tr>';
+            } else {
+                closedBody.innerHTML = closedTrades.map(t => {
+                    const pnlClass = t.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                    return `<tr>
+                        <td style="color:${t.option_type === 'CE' ? 'var(--bull)' : 'var(--bear)'}">${t.option_type}</td>
+                        <td>${t.strike}</td>
+                        <td>₹${t.entry_price.toFixed(2)}</td>
+                        <td>₹${t.current_price.toFixed(2)}</td>
+                        <td class="${pnlClass}">₹${t.pnl.toFixed(2)}</td>
+                    </tr>`;
+                }).join('');
+            }
+
+            const totalClosedPnl = closedTrades.reduce((sum, t) => sum + t.pnl, 0);
+            const totalClosedEl = document.getElementById('totalClosedPnl');
+            totalClosedEl.textContent = '₹' + totalClosedPnl.toFixed(2);
+            totalClosedEl.className = 'total-pnl-val ' + (totalClosedPnl >= 0 ? 'pnl-positive' : 'pnl-negative');
+        }
+
         // ══════════════════════════════════════════════
         // MAIN DATA FETCH
         // ══════════════════════════════════════════════
@@ -1336,7 +2242,7 @@
             try {
                 const [signalRes, candleRes, oiRes] = await Promise.all([
                     fetch(`${API_BASE}/api/signal?ticker=${encodeURIComponent(currentTicker)}`),
-                    fetch(`${API_BASE}/api/candles?ticker=${encodeURIComponent(currentTicker)}`),
+                    fetch(`${API_BASE}/api/candles?ticker=${encodeURIComponent(currentTicker)}&interval=${currentInterval}`),
                     fetch(`${API_BASE}/api/oi?ticker=${encodeURIComponent(currentTicker)}`).catch(() => null)
                 ]);
 
@@ -1352,6 +2258,10 @@
                 const candleData = await candleRes.json();
                 const oiData = oiRes ? await oiRes.json() : { oi_data: [], pcr: null };
 
+                // Cache for overlays and paper trading
+                cachedSignalData = data;
+                cachedOiData = oiData;
+
                 status.className = 'connection-status connected';
                 status.innerHTML = 'Connected · OI: ' + (oiData.pcr !== null ? 'Live' : 'No Data');
 
@@ -1362,7 +2272,6 @@
                 document.getElementById('headerSymbol').textContent = symbolMap[currentTicker] || currentTicker;
                 document.getElementById('headerPrice').textContent = data.current_price;
 
-                // Change % (compute from candle data if available)
                 if (candleData.candles && candleData.candles.length > 1) {
                     const firstClose = candleData.candles[0].close;
                     const change = ((data.current_price - firstClose) / firstClose * 100).toFixed(2);
@@ -1386,6 +2295,14 @@
                     strikeElem.innerText = data.strike_recommendation;
                     strikeElem.className = 'strike-text ' + (isBuy ? 'bullish' : 'bearish');
                 }
+
+                // ── Signal Strength ──
+                renderSignalStrength(data.signal_strength);
+
+                // ── Expected Move ──
+                document.getElementById('expectedMoveHigh').textContent = data.expected_move_high || '--';
+                document.getElementById('expectedMoveLow').textContent = data.expected_move_low || '--';
+                document.getElementById('riskRewardVal').textContent = data.risk_reward ? data.risk_reward + ':1' : '--';
 
                 // ── Gauge ──
                 renderArcGauge(data.confidence_score);
@@ -1413,10 +2330,38 @@
                 stopEl.style.color = 'var(--bear)';
 
                 document.getElementById('priceVal').innerText = data.current_price;
+                document.getElementById('rrLevelVal').innerText = data.risk_reward ? data.risk_reward + ':1' : '--';
 
                 // ── Banners ──
                 document.getElementById('eventBanner').style.display = data.event_warning ? 'block' : 'none';
                 document.getElementById('ivCrushBanner').style.display = data.iv_crush_warning ? 'block' : 'none';
+
+                // ── MTF Table ──
+                renderMTFTable(data.mtf_matrix);
+
+                // ── Signal Reasons ──
+                renderSignalReasons(data.signal_reasons);
+
+                // ── Fibonacci ──
+                renderFibTable(data.fibonacci);
+
+                // ── Key Levels ──
+                renderKeyLevels(data);
+
+                // ── Paper Trading Buttons ──
+                const ceLtp = data.atm_ce_ltp || (oiData ? oiData.atm_ce_ltp : 0);
+                const peLtp = data.atm_pe_ltp || (oiData ? oiData.atm_pe_ltp : 0);
+                const atmStrike = data.atm_strike || oiData.atm_strike || '--';
+
+                document.getElementById('paperAtmStrike').textContent = atmStrike;
+                document.getElementById('buyCePrice').textContent = ceLtp > 0 ? '₹' + parseFloat(ceLtp).toFixed(2) : '₹ --';
+                document.getElementById('buyPePrice').textContent = peLtp > 0 ? '₹' + parseFloat(peLtp).toFixed(2) : '₹ --';
+                document.getElementById('buyCeBtn').disabled = !(ceLtp > 0);
+                document.getElementById('buyPeBtn').disabled = !(peLtp > 0);
+
+                // ── ATM Premium ──
+                document.getElementById('atmCeLtp').innerText = ceLtp > 0 ? '₹' + parseFloat(ceLtp).toFixed(2) : '--';
+                document.getElementById('atmPeLtp').innerText = peLtp > 0 ? '₹' + parseFloat(peLtp).toFixed(2) : '--';
 
                 // ── Stats ──
                 // PCR
@@ -1439,10 +2384,9 @@
                     maxPainElem.innerText = '--';
                 }
 
-                // Expiry
                 document.getElementById('expiryVal').innerText = data.expiry || '--';
 
-                // FII / DII (formatted as ₹ Cr)
+                // FII / DII
                 const fiiElem = document.getElementById('fiiVal');
                 if (data.fii_net) {
                     const fiiAbs = Math.abs(data.fii_net);
@@ -1465,8 +2409,8 @@
                 // Pattern
                 const patternElem = document.getElementById('patternVal');
                 patternElem.innerText = data.chart_pattern || 'None';
-                const bullPatterns = ['Bullish Engulfing', 'Hammer'];
-                const bearPatterns = ['Bearish Engulfing'];
+                const bullPatterns = ['Bullish Engulfing', 'Hammer', 'Morning Star', 'Bullish Pin Bar', 'Three White Soldiers', 'Inverted Hammer'];
+                const bearPatterns = ['Bearish Engulfing', 'Shooting Star', 'Evening Star', 'Bearish Pin Bar', 'Three Black Crows', 'Hanging Man'];
                 patternElem.className = 'stat-value ' + (bullPatterns.includes(data.chart_pattern) ? 'bullish' : bearPatterns.includes(data.chart_pattern) ? 'bearish' : '');
 
                 // RSI
@@ -1474,14 +2418,14 @@
                 rsiElem.innerText = data.rsi;
                 rsiElem.className = 'stat-value ' + (data.rsi > 60 ? 'bullish' : data.rsi < 40 ? 'bearish' : '');
 
-                // Supertrend (NEW)
+                // Supertrend
                 const stElem = document.getElementById('supertrendVal');
                 if (data.supertrend_direction) {
                     stElem.innerText = data.supertrend_direction;
                     stElem.className = 'stat-value ' + (data.supertrend_direction === 'Bullish' ? 'bullish' : 'bearish');
                 } else { stElem.innerText = '--'; }
 
-                // Volume Surge (NEW)
+                // Volume Surge
                 const vsElem = document.getElementById('volSurgeVal');
                 if (data.volume_surge) {
                     vsElem.innerText = data.volume_ratio + 'x ▲';
@@ -1491,12 +2435,12 @@
                     vsElem.className = 'stat-value';
                 }
 
-                // Stoch RSI (NEW)
+                // Stoch RSI
                 const srElem = document.getElementById('stochRsiVal');
                 srElem.innerText = data.stoch_rsi_k + ' / ' + data.stoch_rsi_d;
                 srElem.className = 'stat-value ' + (data.stoch_rsi_k < 20 ? 'bearish' : data.stoch_rsi_k > 80 ? 'bullish' : '');
 
-                // RSI Divergence (NEW)
+                // RSI Divergence
                 const rdElem = document.getElementById('rsiDivVal');
                 if (data.rsi_divergence === 'bullish') {
                     rdElem.innerText = 'Bullish ↑';
@@ -1509,14 +2453,16 @@
                     rdElem.className = 'stat-value';
                 }
 
-                // MTF Confluence (NEW)
+                // MTF Confluence
                 const mtfElem = document.getElementById('mtfVal');
                 if (data.mtf_confluence) {
                     mtfElem.innerText = data.mtf_confluence;
-                    mtfElem.className = 'stat-value ' + (data.mtf_confluence.startsWith('3B') ? 'bullish' : data.mtf_confluence.startsWith('0B') ? 'bearish' : '');
+                    const mtfMatch = data.mtf_confluence.match(/(\d+)B/);
+                    const bCount = mtfMatch ? parseInt(mtfMatch[1]) : 0;
+                    mtfElem.className = 'stat-value ' + (bCount >= 4 ? 'bullish' : bCount <= 1 ? 'bearish' : '');
                 } else { mtfElem.innerText = '--'; }
 
-                // VIX (NEW)
+                // VIX
                 const vixElem = document.getElementById('vixVal');
                 if (data.vix) {
                     const vixTxt = data.vix.toFixed(1) + (data.vix_change ? ' (' + (data.vix_change > 0 ? '+' : '') + data.vix_change + '%)' : '');
@@ -1578,12 +2524,6 @@
                     ivSkewElem.innerText = '--';
                 }
 
-                // ── ATM Premium ──
-                const ceLtp = data.atm_ce_ltp || (oiData ? oiData.atm_ce_ltp : 0);
-                const peLtp = data.atm_pe_ltp || (oiData ? oiData.atm_pe_ltp : 0);
-                document.getElementById('atmCeLtp').innerText = ceLtp > 0 ? '₹' + ceLtp.toFixed(2) : '--';
-                document.getElementById('atmPeLtp').innerText = peLtp > 0 ? '₹' + peLtp.toFixed(2) : '--';
-
                 // ── News (5 headlines) ──
                 const newsItems = document.getElementById('newsItems');
                 newsItems.innerHTML = '';
@@ -1599,31 +2539,11 @@
                 if (candleData.candles && candleData.candles.length > 0) {
                     lastCandles = candleData.candles;
                     candleSeries.setData(candleData.candles);
-
-                    if (window.resistanceLine) candleSeries.removePriceLine(window.resistanceLine);
-                    if (window.supportLine) candleSeries.removePriceLine(window.supportLine);
-
-                    if (oiData && oiData.highest_ce_strike > 0) {
-                        window.resistanceLine = candleSeries.createPriceLine({
-                            price: oiData.highest_ce_strike,
-                            color: '#EF4444',
-                            lineWidth: 1,
-                            lineStyle: LightweightCharts.LineStyle.Dashed,
-                            axisLabelVisible: true,
-                            title: 'Res (Max CE OI)',
-                        });
-                    }
-                    if (oiData && oiData.highest_pe_strike > 0) {
-                        window.supportLine = candleSeries.createPriceLine({
-                            price: oiData.highest_pe_strike,
-                            color: '#10B981',
-                            lineWidth: 1,
-                            lineStyle: LightweightCharts.LineStyle.Dashed,
-                            axisLabelVisible: true,
-                            title: 'Sup (Max PE OI)',
-                        });
-                    }
-
+                    ema9Line.setData([]);
+                    ema21Line.setData([]);
+                    vwapLine.setData([]);
+                    addChartOverlays(candleData.candles);
+                    addChartPriceLines();
                     priceChart.timeScale().fitContent();
                     renderSparkline(lastCandles);
                 }
@@ -1632,6 +2552,9 @@
                 renderOIChart(oiData.oi_data, oiData.atm_strike);
 
                 document.getElementById('content').style.display = 'block';
+
+                // ── Refresh paper trades ──
+                refreshPaperTrades();
 
                 // ── Notifications ──
                 if (data.action !== "WAIT" && data.action !== lastAction) {
@@ -1648,6 +2571,47 @@
             }
         }
 
+        // ═══════════════════════════════════════════
+        // BACKTEST PERFORMANCE
+        // ═══════════════════════════════════════════
+        let backtestFetched = false;
+
+        async function fetchBacktest() {
+            if (backtestFetched) return; // Only fetch once per session
+            try {
+                const res = await fetch(`${API_BASE}/api/backtest?ticker=${encodeURIComponent(currentTicker)}`);
+                const bt = await res.json();
+                if (bt.error) return;
+
+                backtestFetched = true;
+
+                const wrEl = document.getElementById('perfWinRate');
+                wrEl.textContent = bt.win_rate + '%';
+                wrEl.style.color = bt.win_rate >= 55 ? 'var(--bull)' : bt.win_rate < 45 ? 'var(--bear)' : 'var(--ember)';
+
+                const retEl = document.getElementById('perfReturn');
+                retEl.textContent = (bt.total_return >= 0 ? '+' : '') + bt.total_return + '%';
+                retEl.style.color = bt.total_return >= 0 ? 'var(--bull)' : 'var(--bear)';
+
+                const ddEl = document.getElementById('perfDrawdown');
+                ddEl.textContent = bt.max_drawdown + '%';
+                ddEl.style.color = bt.max_drawdown > 15 ? 'var(--bear)' : bt.max_drawdown > 8 ? 'var(--ember)' : 'var(--bull)';
+
+                const shEl = document.getElementById('perfSharpe');
+                shEl.textContent = bt.sharpe_ratio;
+                shEl.style.color = bt.sharpe_ratio >= 1.5 ? 'var(--bull)' : bt.sharpe_ratio >= 0.5 ? 'var(--ember)' : 'var(--bear)';
+
+                document.getElementById('perfTrades').textContent = bt.total_trades;
+                document.getElementById('perfTrades').style.color = 'var(--text-primary)';
+
+                const avgEl = document.getElementById('perfAvgTrade');
+                avgEl.textContent = (bt.avg_trade_pct >= 0 ? '+' : '') + bt.avg_trade_pct + '%';
+                avgEl.style.color = bt.avg_trade_pct >= 0 ? 'var(--bull)' : 'var(--bear)';
+            } catch (e) {
+                console.error('Backtest fetch error:', e);
+            }
+        }
+
         // ── Init ────────────────────────────────────
         document.addEventListener('DOMContentLoaded', () => {
             if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
@@ -1660,6 +2624,8 @@
             setInterval(updateClock, 1000);
             fetchData();
             setInterval(fetchData, 60000);
+            // Fetch backtest after a short delay (non-blocking)
+            setTimeout(fetchBacktest, 5000);
         });
     </script>
 </body>
