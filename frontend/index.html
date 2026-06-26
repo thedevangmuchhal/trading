@@ -360,7 +360,7 @@
     </div>
 
     <script>
-        const API_BASE = "https://trading-98h5.onrender.com/api";
+        const API_BASE = "https://trading-98h5.onrender.com";
         let currentTicker = "^NSEI";
         let lastAction = "WAIT";
         let priceChart = null;
@@ -371,6 +371,8 @@
                 Notification.requestPermission();
             }
             initPriceChart();
+            fetchData();
+            setInterval(fetchData, 60000);
         });
 
         function initPriceChart() {
@@ -444,11 +446,10 @@
             const status = document.getElementById('connectionStatus');
 
             try {
-                // Fetch signal, candles, and OI data in parallel
                 const [signalRes, candleRes, oiRes] = await Promise.all([
-                    fetch(`${BASE_URL}/api/signal?ticker=${encodeURIComponent(currentTicker)}`),
-                    fetch(`${BASE_URL}/api/candles?ticker=${encodeURIComponent(currentTicker)}`),
-                    fetch(`${BASE_URL}/api/oi?ticker=${encodeURIComponent(currentTicker)}`).catch(() => null)
+                    fetch(`${API_BASE}/api/signal?ticker=${encodeURIComponent(currentTicker)}`),
+                    fetch(`${API_BASE}/api/candles?ticker=${encodeURIComponent(currentTicker)}`),
+                    fetch(`${API_BASE}/api/oi?ticker=${encodeURIComponent(currentTicker)}`).catch(() => null)
                 ]);
 
                 const data = await signalRes.json();
