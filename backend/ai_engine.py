@@ -426,11 +426,28 @@ def generate_signals(ticker="^NSEI"):
     # SENTIMENT SCORE
     # -----------------------------------------------------
     event_warning = False
-    event_keywords = ["rbi", "fed", "policy", "rate", "budget", "cpi", "inflation", "election", "war", "crash"]
+    # Use multi-word phrases to avoid false positives (e.g. 'rate' matching 'corporate')
+    # Only flag genuinely market-moving macro events
+    event_phrases = [
+        "rbi policy", "rbi rate", "rbi decision", "monetary policy",
+        "fed rate", "fed decision", "fomc",
+        "union budget", "budget 2025", "budget 2026",
+        "cpi data", "cpi print", "inflation surge", "inflation spike",
+        "election result", "election outcome",
+        "war", "conflict", "missile", "attack",
+        "crash", "circuit breaker", "black swan", "panic sell"
+    ]
+    single_event_words = ["crash", "war", "fomc"]  # These alone are significant enough
     for headline in headlines:
-        if any(keyword in headline.lower() for keyword in event_keywords):
+        hl = headline.lower()
+        phrase_match = any(phrase in hl for phrase in event_phrases)
+        # For single words, use word boundary check
+        word_match = any(
+            f" {w} " in f" {hl} " for w in single_event_words
+        )
+        if phrase_match or word_match:
             event_warning = True
-            sentiment_score -= 30
+            sentiment_score -= 25  # Reduced from -30, less aggressive
             break
             
     sentiment_score += (sentiment_val * 0.4) # Scale sentiment (-100 to 100)
@@ -542,13 +559,19 @@ def generate_signals(ticker="^NSEI"):
     elif rsi_divergence == 'bearish':
         technical_score -= 15
 
-    # NEW: Stochastic RSI crossover
+    # NEW: Stochastic RSI crossover + extreme zones
     stoch_k = tech_data.get('stoch_rsi_k', 50)
     stoch_d = tech_data.get('stoch_rsi_d', 50)
     if stoch_k < 20 and stoch_k > stoch_d:
         technical_score += 10  # Oversold crossover (bullish)
     elif stoch_k > 80 and stoch_k < stoch_d:
         technical_score -= 10  # Overbought crossover (bearish)
+    
+    # Deep extreme zones (StochRSI < 5 or > 95)
+    if stoch_k < 5:
+        technical_score += 10  # Extremely oversold — high reversal probability
+    elif stoch_k > 95:
+        technical_score -= 10  # Extremely overbought
 
     # NEW: Volume Surge confirmation
     if tech_data.get('volume_surge', False):
@@ -580,7 +603,20 @@ def generate_signals(ticker="^NSEI"):
         technical_score -= 20  # Bull Trap — lower TF against higher TFs
     elif trends_15m == "Bearish" and trends_1h == "Bullish" and trends_4h == "Bullish":
         technical_score += 20  # Bear Trap — pullback in uptrend
-        
+
+    # MEAN REVERSION: Oversold 15m inside bullish higher TFs = high-probability reversal
+    rsi_val = tech_data.get('rsi', 50)
+    if rsi_val < 35 and bullish_count >= 2:
+        technical_score += 15  # Oversold pullback in bullish structure
+    elif rsi_val > 65 and bearish_count >= 2:
+        technical_score -= 15  # Overbought bounce in bearish structure
+    
+    # Extreme RSI + MTF alignment = strong signal
+    if rsi_val < 25 and stoch_k < 10 and bullish_count >= 2:
+        technical_score += 20  # Very high probability mean reversion setup
+    elif rsi_val > 75 and stoch_k > 90 and bearish_count >= 2:
+        technical_score -= 20  # Very high probability reversal down
+
     market_condition = "Trending"
     if tech_data['adx'] < 20:
         technical_score -= 30 
@@ -592,8 +628,18 @@ def generate_signals(ticker="^NSEI"):
     technical_score = int(max(0, min(100, technical_score)))
     sentiment_score = int(max(0, min(100, sentiment_score)))
 
-    # Calculate global confidence average
-    confidence = int((smart_money_score + options_score + technical_score + sentiment_score) / 4)
+    # ADAPTIVE CONFIDENCE — reweight when OI data is unavailable
+    has_oi_data = oi_metrics is not None and oi_metrics.get('pcr') is not None
+    if has_oi_data:
+        # All 4 pillars available — equal weight
+        confidence = int((smart_money_score + options_score + technical_score + sentiment_score) / 4)
+    else:
+        # No OI — redistribute to other 3 pillars (tech-heavy for intraday)
+        confidence = int(
+            smart_money_score * 0.30 +
+            technical_score * 0.45 +
+            sentiment_score * 0.25
+        )
 
     # -----------------------------------------------------
     # ACTION TRIGGER COMBO LOGIC
@@ -601,28 +647,40 @@ def generate_signals(ticker="^NSEI"):
     action = "WAIT"
     strike_type = None
 
-    if smart_money_score >= 80 and options_score >= 60:
+    if smart_money_score >= 80 and (options_score >= 60 or not has_oi_data):
         action = "BUY"
         strike_type = "CE"
-        confidence = max(confidence, 85) # Smart Money Override
-    elif smart_money_score <= 20 and options_score <= 40:
-        action = "SELL"
-        strike_type = "PE"
-        confidence = min(confidence, 15)
-        
-    elif technical_score >= 80 and options_score >= 55:
-        action = "BUY"
-        strike_type = "CE"
-        confidence = max(confidence, 80) # Pine Script Breakout Override
-    elif technical_score <= 20 and options_score <= 45:
+        confidence = max(confidence, 80) # Smart Money Override
+    elif smart_money_score <= 20 and (options_score <= 40 or not has_oi_data):
         action = "SELL"
         strike_type = "PE"
         confidence = min(confidence, 20)
         
-    elif confidence >= 75:
+    elif technical_score >= 75 and (options_score >= 55 or not has_oi_data):
         action = "BUY"
         strike_type = "CE"
-    elif confidence <= 25:
+        confidence = max(confidence, 75) # Technical Breakout Override
+    elif technical_score <= 25 and (options_score <= 45 or not has_oi_data):
+        action = "SELL"
+        strike_type = "PE"
+        confidence = min(confidence, 25)
+    
+    # Mean reversion trigger: deeply oversold + institutional buying + higher TFs bullish
+    elif (rsi_val < 35 and stoch_k < 20 and bullish_count >= 2 
+          and smart_money_score >= 65):
+        action = "BUY"
+        strike_type = "CE"
+        confidence = max(confidence, 65)
+    elif (rsi_val > 65 and stoch_k > 80 and bearish_count >= 2 
+          and smart_money_score <= 35):
+        action = "SELL"
+        strike_type = "PE"
+        confidence = min(confidence, 35)
+
+    elif confidence >= 70:
+        action = "BUY"
+        strike_type = "CE"
+    elif confidence <= 30:
         action = "SELL"
         strike_type = "PE"
 
