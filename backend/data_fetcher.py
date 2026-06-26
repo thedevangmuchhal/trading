@@ -145,21 +145,31 @@ def get_filtered_angel_options(base_symbol):
             import tempfile
             import os
             
-            # Download to a temporary file on disk rather than holding 35MB in RAM
             temp_path = os.path.join(tempfile.gettempdir(), "angel_tokens.json")
+            
+            def download_tokens():
+                tmp_dl = temp_path + ".tmp"
+                urllib.request.urlretrieve(url, tmp_dl)
+                os.replace(tmp_dl, temp_path)
+
             if not os.path.exists(temp_path):
-                urllib.request.urlretrieve(url, temp_path)
+                download_tokens()
             
-            angel_filtered_opts = []
-            
-            # Stream parse using ijson
-            with open(temp_path, "rb") as f:
-                # The JSON is an array of objects
-                objects = ijson.items(f, "item")
-                for obj in objects:
-                    # Filter down instantly to only what we need
-                    if obj.get("name") == angel_base_symbol and obj.get("instrumenttype") in ["OPTIDX", "OPTSTK"]:
-                        angel_filtered_opts.append(obj)
+            def parse_tokens():
+                opts = []
+                with open(temp_path, "rb") as f:
+                    objects = ijson.items(f, "item")
+                    for obj in objects:
+                        if obj.get("name") == angel_base_symbol and obj.get("instrumenttype") in ["OPTIDX", "OPTSTK"]:
+                            opts.append(obj)
+                return opts
+
+            try:
+                angel_filtered_opts = parse_tokens()
+            except Exception as e:
+                print(f"Parsing failed ({e}), redownloading corrupted file...")
+                download_tokens()
+                angel_filtered_opts = parse_tokens()
             
             print(f"Successfully loaded {len(angel_filtered_opts)} options for {angel_base_symbol}")
             
