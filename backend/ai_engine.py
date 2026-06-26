@@ -737,6 +737,13 @@ def generate_signals(ticker="^NSEI"):
         "pcr": pcr,
         "vpcr": vpcr,
         "max_pain": oi_metrics['max_pain'] if oi_metrics else None,
+        "expiry": oi_metrics['expiry'] if oi_metrics else None,
+        "oi_data": oi_metrics['oi_data'] if oi_metrics else [],
+        "buildup": oi_metrics['buildup'] if oi_metrics else None,
+        "greeks": oi_metrics['greeks'] if oi_metrics else None,
+        "total_ce_vol": oi_metrics['total_ce_vol'] if oi_metrics else None,
+        "total_pe_vol": oi_metrics['total_pe_vol'] if oi_metrics else None,
+        
         "chart_pattern": tech_data['chart_pattern'],
         "orb_breakout": tech_data['orb_breakout'],
         
