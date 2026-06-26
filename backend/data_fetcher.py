@@ -148,7 +148,8 @@ def get_filtered_angel_options(base_symbol):
             temp_path = os.path.join(tempfile.gettempdir(), "angel_tokens.json")
             
             def download_tokens():
-                tmp_dl = temp_path + ".tmp"
+                import uuid
+                tmp_dl = temp_path + f".{uuid.uuid4().hex}.tmp"
                 urllib.request.urlretrieve(url, tmp_dl)
                 os.replace(tmp_dl, temp_path)
 
