@@ -107,6 +107,10 @@
         .sell .action-text { color: var(--red); }
         .wait .action-text { color: var(--text-muted); }
         .strike-text { font-size: 1rem; margin-top: 0.5rem; font-weight: 600; color: var(--text-main); }
+        .strike-text.bullish { color: var(--green); }
+        .strike-text.bearish { color: var(--red); }
+        .level-val.bullish { color: var(--green) !important; }
+        .level-val.bearish { color: var(--red) !important; }
 
         /* Levels Row */
         .levels {
@@ -317,6 +321,14 @@
                     <div id="pcrVal" class="stat-value">--</div>
                 </div>
                 <div class="stat-card">
+                    <div class="stat-label">Max Pain</div>
+                    <div id="maxPainVal" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Expiry</div>
+                    <div id="expiryVal" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
                     <div class="stat-label">FII Net (Cr)</div>
                     <div id="fiiVal" class="stat-value">--</div>
                 </div>
@@ -337,8 +349,16 @@
                     <div id="patternVal" class="stat-value">--</div>
                 </div>
                 <div class="stat-card">
+                    <div class="stat-label">OI Buildup</div>
+                    <div id="buildupVal" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
                     <div class="stat-label">Opt Vol (CE / PE)</div>
                     <div id="optVolVal" class="stat-value">--</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">IV Skew</div>
+                    <div id="ivSkewVal" class="stat-value">--</div>
                 </div>
                 <div class="stat-card">
                     <div class="stat-label">Delta (CE / PE)</div>
@@ -456,7 +476,7 @@
                 
                 if (data.error) {
                     status.className = 'connection-status disconnected';
-                    status.innerHTML = '⚠️ Yahoo Finance Rate Limit: Market Data Unavailable. Retrying...';
+                    status.innerHTML = '⚠️ Market Data Temporarily Unavailable. Auto-retrying in 60s...';
                     document.getElementById('loader').style.display = 'none';
                     return;
                 }
@@ -467,119 +487,155 @@
                 status.className = 'connection-status connected';
                 status.innerHTML = '🟢 Connected to Engine | OI Tick: ' + (oiData.pcr !== null ? '✅ Live' : '⚠️ No OI Data');
 
-                // Update Signal
+                // --- Signal Box ---
+                const isBuy = data.action === 'BUY';
+                const isSell = data.action === 'SELL';
                 const signalBox = document.getElementById('signalBox');
                 signalBox.className = 'signal-box ' + data.action.toLowerCase();
                 document.getElementById('actionText').innerText = data.action;
                 
                 const strikeElem = document.getElementById('strikeText');
-                strikeElem.innerText = data.action === 'WAIT' ? 'No Trade Recommended' : data.strike_recommendation;
-                if (data.strike_recommendation.includes('CE')) strikeElem.className = 'strike-text bullish';
-                else if (data.strike_recommendation.includes('PE')) strikeElem.className = 'strike-text bearish';
-                else strikeElem.className = 'strike-text';
+                if (data.action === 'WAIT') {
+                    strikeElem.innerText = 'No Trade Recommended';
+                    strikeElem.className = 'strike-text';
+                } else {
+                    strikeElem.innerText = data.strike_recommendation;
+                    strikeElem.className = 'strike-text ' + (isBuy ? 'bullish' : 'bearish');
+                }
 
-                document.getElementById('entryVal').innerText = data.entry_level > 0 ? data.entry_level : '--';
-                document.getElementById('targetVal').innerText = data.target > 0 ? data.target : '--';
-                document.getElementById('stopVal').innerText = data.stop_loss > 0 ? data.stop_loss : '--';
+                // --- Entry / Target / SL / Price with colors ---
+                const entryEl = document.getElementById('entryVal');
+                entryEl.innerText = data.entry_level > 0 ? data.entry_level : '--';
+                entryEl.className = 'level-val ' + (isBuy ? 'bullish' : isSell ? 'bearish' : '');
+
+                const targetEl = document.getElementById('targetVal');
+                targetEl.innerText = data.target > 0 ? data.target : '--';
+                targetEl.style.color = isBuy ? 'var(--green)' : isSell ? 'var(--red)' : 'var(--green)';
+
+                const stopEl = document.getElementById('stopVal');
+                stopEl.innerText = data.stop_loss > 0 ? data.stop_loss : '--';
+                stopEl.style.color = 'var(--red)';
+
                 document.getElementById('priceVal').innerText = data.current_price;
 
-                // Stats
+                // --- Confidence ---
                 const confElem = document.getElementById('confidenceVal');
                 confElem.innerText = data.confidence_score + ' / 100';
-                if (data.confidence_score >= 70) confElem.className = 'stat-value bullish';
-                else if (data.confidence_score <= 30) confElem.className = 'stat-value bearish';
-                else confElem.className = 'stat-value';
+                confElem.className = 'stat-value ' + (data.confidence_score >= 70 ? 'bullish' : data.confidence_score <= 30 ? 'bearish' : '');
                 
-                // Event Warning
-                if (data.event_warning) {
-                    document.getElementById('eventBanner').style.display = 'block';
-                } else {
-                    document.getElementById('eventBanner').style.display = 'none';
-                }
+                // --- Event Warning ---
+                document.getElementById('eventBanner').style.display = data.event_warning ? 'block' : 'none';
                 
-                // FII/DII
+                // --- FII / DII ---
                 const fiiElem = document.getElementById('fiiVal');
                 fiiElem.innerText = data.fii_net ? data.fii_net : '--';
-                if (data.fii_net > 0) fiiElem.className = 'stat-value bullish';
-                else if (data.fii_net < 0) fiiElem.className = 'stat-value bearish';
-                else fiiElem.className = 'stat-value';
+                fiiElem.className = 'stat-value ' + (data.fii_net > 0 ? 'bullish' : data.fii_net < 0 ? 'bearish' : '');
                 
                 const diiElem = document.getElementById('diiVal');
                 diiElem.innerText = data.dii_net ? data.dii_net : '--';
-                if (data.dii_net > 0) diiElem.className = 'stat-value bullish';
-                else if (data.dii_net < 0) diiElem.className = 'stat-value bearish';
-                else diiElem.className = 'stat-value';
+                diiElem.className = 'stat-value ' + (data.dii_net > 0 ? 'bullish' : data.dii_net < 0 ? 'bearish' : '');
                 
+                // --- PCR ---
                 const pcrElem = document.getElementById('pcrVal');
-                let pcrText = '-- / --';
-                let pcrClass = '';
-                
                 if (data.pcr !== null && data.pcr !== undefined) {
-                    const oiPcr = data.pcr;
                     const volPcr = data.vpcr !== null && data.vpcr !== undefined ? data.vpcr : '--';
-                    pcrText = `${oiPcr} / ${volPcr}`;
-                    
-                    if (oiPcr > 1.2 || volPcr > 1.2) pcrClass = 'bullish';
-                    else if (oiPcr < 0.8 || volPcr < 0.8) pcrClass = 'bearish';
+                    pcrElem.innerText = `${data.pcr} / ${volPcr}`;
+                    pcrElem.className = 'stat-value ' + (data.pcr > 1.2 ? 'bullish' : data.pcr < 0.8 ? 'bearish' : '');
+                } else {
+                    pcrElem.innerText = '-- / --';
+                    pcrElem.className = 'stat-value';
                 }
-                
-                pcrElem.innerText = pcrText;
-                pcrElem.className = 'stat-value ' + pcrClass;
 
+                // --- Max Pain ---
+                const maxPainElem = document.getElementById('maxPainVal');
+                if (data.max_pain) {
+                    maxPainElem.innerText = data.max_pain;
+                    maxPainElem.className = 'stat-value ' + (data.current_price < data.max_pain ? 'bullish' : 'bearish');
+                } else {
+                    maxPainElem.innerText = '--';
+                    maxPainElem.className = 'stat-value';
+                }
+
+                // --- Expiry ---
+                const expiryElem = document.getElementById('expiryVal');
+                if (oiData && oiData.expiry) {
+                    expiryElem.innerText = oiData.expiry;
+                } else {
+                    expiryElem.innerText = '--';
+                }
+                expiryElem.className = 'stat-value';
+
+                // --- Sentiment ---
                 const sentimentElem = document.getElementById('sentimentVal');
                 sentimentElem.innerText = data.sentiment_score;
-                if (data.sentiment_score > 0) sentimentElem.className = 'stat-value bullish';
-                else if (data.sentiment_score < 0) sentimentElem.className = 'stat-value bearish';
-                else sentimentElem.className = 'stat-value';
+                sentimentElem.className = 'stat-value ' + (data.sentiment_score > 0 ? 'bullish' : data.sentiment_score < 0 ? 'bearish' : '');
 
+                // --- Trend ---
                 const trendElem = document.getElementById('trendVal');
                 trendElem.innerText = data.tech_trend;
-                if (data.tech_trend.includes('Bullish')) trendElem.className = 'stat-value bullish';
-                else if (data.tech_trend.includes('Bearish')) trendElem.className = 'stat-value bearish';
-                else trendElem.className = 'stat-value';
+                trendElem.className = 'stat-value ' + (data.tech_trend.includes('Bullish') ? 'bullish' : data.tech_trend.includes('Bearish') ? 'bearish' : '');
                 
+                // --- Pattern ---
                 const patternElem = document.getElementById('patternVal');
                 patternElem.innerText = data.chart_pattern || 'None';
-                if (data.chart_pattern === 'Bullish Engulfing' || data.chart_pattern === 'Hammer') {
-                    patternElem.className = 'stat-value bullish';
-                } else if (data.chart_pattern === 'Bearish Engulfing') {
-                    patternElem.className = 'stat-value bearish';
+                const bullPatterns = ['Bullish Engulfing', 'Hammer'];
+                const bearPatterns = ['Bearish Engulfing'];
+                patternElem.className = 'stat-value ' + (bullPatterns.includes(data.chart_pattern) ? 'bullish' : bearPatterns.includes(data.chart_pattern) ? 'bearish' : '');
+
+                // --- OI Buildup ---
+                const buildupElem = document.getElementById('buildupVal');
+                if (oiData && oiData.buildup) {
+                    const ceChg = oiData.buildup.ce_change || 0;
+                    const peChg = oiData.buildup.pe_change || 0;
+                    if (peChg > ceChg * 1.2) {
+                        buildupElem.innerText = 'Put Writing ↑';
+                        buildupElem.className = 'stat-value bullish';
+                    } else if (ceChg > peChg * 1.2) {
+                        buildupElem.innerText = 'Call Writing ↑';
+                        buildupElem.className = 'stat-value bearish';
+                    } else {
+                        buildupElem.innerText = 'Balanced';
+                        buildupElem.className = 'stat-value';
+                    }
                 } else {
-                    patternElem.className = 'stat-value';
+                    buildupElem.innerText = '--';
+                    buildupElem.className = 'stat-value';
                 }
 
+                // --- Options Volume ---
                 const optVolElem = document.getElementById('optVolVal');
                 const deltaElem = document.getElementById('deltaVal');
                 const ivElem = document.getElementById('ivVal');
+                const ivSkewElem = document.getElementById('ivSkewVal');
 
                 if (oiData && oiData.total_ce_vol !== undefined) {
                     const ceVol = oiData.total_ce_vol;
                     const peVol = oiData.total_pe_vol;
                     optVolElem.innerText = (ceVol / 1000000).toFixed(1) + 'M / ' + (peVol / 1000000).toFixed(1) + 'M';
-                    if (peVol > ceVol * 1.1) optVolElem.className = 'stat-value bullish';
-                    else if (ceVol > peVol * 1.1) optVolElem.className = 'stat-value bearish';
-                    else optVolElem.className = 'stat-value';
+                    optVolElem.className = 'stat-value ' + (peVol > ceVol * 1.1 ? 'bullish' : ceVol > peVol * 1.1 ? 'bearish' : '');
                     
                     if (oiData.greeks) {
                         deltaElem.innerText = `${oiData.greeks.ce_delta} / ${oiData.greeks.pe_delta}`;
-                        if (Math.abs(oiData.greeks.ce_delta) > Math.abs(oiData.greeks.pe_delta)) deltaElem.className = 'stat-value bullish';
-                        else if (Math.abs(oiData.greeks.pe_delta) > Math.abs(oiData.greeks.ce_delta)) deltaElem.className = 'stat-value bearish';
-                        else deltaElem.className = 'stat-value';
+                        deltaElem.className = 'stat-value ' + (Math.abs(oiData.greeks.ce_delta) > Math.abs(oiData.greeks.pe_delta) ? 'bullish' : 'bearish');
 
                         ivElem.innerText = `${oiData.greeks.ce_iv}% / ${oiData.greeks.pe_iv}%`;
-                        if (oiData.greeks.pe_iv > oiData.greeks.ce_iv * 1.1) ivElem.className = 'stat-value bearish';
-                        else if (oiData.greeks.ce_iv > oiData.greeks.pe_iv * 1.1) ivElem.className = 'stat-value bullish';
-                        else ivElem.className = 'stat-value';
+                        ivElem.className = 'stat-value ' + (oiData.greeks.ce_iv > oiData.greeks.pe_iv * 1.1 ? 'bullish' : oiData.greeks.pe_iv > oiData.greeks.ce_iv * 1.1 ? 'bearish' : '');
+
+                        // IV Skew
+                        const skew = (oiData.greeks.ce_iv - oiData.greeks.pe_iv).toFixed(1);
+                        ivSkewElem.innerText = skew + '%';
+                        ivSkewElem.className = 'stat-value ' + (skew > 2 ? 'bullish' : skew < -2 ? 'bearish' : '');
                     }
                 } else {
                     optVolElem.innerText = '--';
                     deltaElem.innerText = '--';
                     ivElem.innerText = '--';
+                    ivSkewElem.innerText = '--';
                 }
 
                 document.getElementById('timestamp').innerText = "Last Updated: " + new Date().toLocaleTimeString();
 
-                // News
+                // --- News ---
                 const newsItems = document.getElementById('newsItems');
                 newsItems.innerHTML = '';
                 (data.recent_headlines || []).forEach(h => {
@@ -588,18 +644,45 @@
                     newsItems.appendChild(p);
                 });
 
-                // Price Chart
+                // --- Price Chart ---
                 if (candleData.candles && candleData.candles.length > 0) {
                     candleSeries.setData(candleData.candles);
+                    
+                    // Clear old price lines
+                    if (window.resistanceLine) candleSeries.removePriceLine(window.resistanceLine);
+                    if (window.supportLine) candleSeries.removePriceLine(window.supportLine);
+                    
+                    // Add new price lines based on OI
+                    if (oiData && oiData.highest_ce_strike > 0) {
+                        window.resistanceLine = candleSeries.createPriceLine({
+                            price: oiData.highest_ce_strike,
+                            color: '#ff1744',
+                            lineWidth: 2,
+                            lineStyle: LightweightCharts.LineStyle.Dashed,
+                            axisLabelVisible: true,
+                            title: 'Max CE OI (Res)',
+                        });
+                    }
+                    if (oiData && oiData.highest_pe_strike > 0) {
+                        window.supportLine = candleSeries.createPriceLine({
+                            price: oiData.highest_pe_strike,
+                            color: '#00e676',
+                            lineWidth: 2,
+                            lineStyle: LightweightCharts.LineStyle.Dashed,
+                            axisLabelVisible: true,
+                            title: 'Max PE OI (Sup)',
+                        });
+                    }
+                    
                     priceChart.timeScale().fitContent();
                 }
 
-                // OI Chart
+                // --- OI Chart ---
                 renderOIChart(oiData.oi_data, oiData.atm_strike);
 
                 document.getElementById('content').style.display = 'block';
 
-                // Notifications
+                // --- Notifications ---
                 if (data.action !== "WAIT" && data.action !== lastAction) {
                     triggerNotification(data.action, data.target);
                 }

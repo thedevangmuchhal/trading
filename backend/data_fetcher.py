@@ -5,6 +5,8 @@ import pyotp
 import requests
 from SmartApi import SmartConnect
 import time
+import threading
+from datetime import datetime
 
 # Setup custom session to bypass Yahoo Finance rate-limiting on Render
 session = requests.Session()
@@ -23,17 +25,24 @@ ANGEL_PIN = os.environ.get("ANGEL_PIN", "")
 ANGEL_TOTP_SECRET = os.environ.get("ANGEL_TOTP_SECRET", "")
 
 _angel_session_cache = None
+_angel_session_time = 0  # Track when session was created
 _oi_cache = {} # Cache for advanced OI data to prevent rate-limiting
 _morning_oi_cache = {} # Track 9:15 AM OI for Buildup tracking
 
-def get_angel_session():
+def get_angel_session(force_refresh=False):
     """
     Establishes a secure, SEBI-compliant connection to Angel One using TOTP.
-    Caches the session to prevent exceeding API access rate limits.
+    Caches the session but auto-refreshes if older than 8 hours (TOTP expires after ~24h).
     """
-    global _angel_session_cache
-    if _angel_session_cache is not None:
-        return _angel_session_cache
+    global _angel_session_cache, _angel_session_time
+    
+    # Auto-refresh if session is older than 8 hours
+    if _angel_session_cache is not None and not force_refresh:
+        if (time.time() - _angel_session_time) < 28800:  # 8 hours
+            return _angel_session_cache
+        else:
+            print("Angel One session expired (>8h). Refreshing...")
+            _angel_session_cache = None
         
     if not all([ANGEL_API_KEY, ANGEL_CLIENT_ID, ANGEL_PIN, ANGEL_TOTP_SECRET]):
         return None
@@ -44,12 +53,11 @@ def get_angel_session():
         if data.get('status'):
             print("Successfully connected to Angel One SmartAPI!")
             _angel_session_cache = obj
+            _angel_session_time = time.time()
             return obj
     except Exception as e:
         print(f"Angel Login Failed: {e}")
     return None
-
-import time as _time
 
 # Smart cache: stores {ticker: {data: df, timestamp: epoch}}
 _market_cache = {}
@@ -110,12 +118,9 @@ def fetch_vix():
         print(f"Error fetching VIX: {e}")
     return {"current": 15.0, "pct_change": 0.0}
 
-import time
-from datetime import datetime
 import ijson
 import urllib.request
 import tempfile
-import os
 
 # Global cache for only the filtered NIFTY tokens (saves massive memory)
 angel_filtered_opts = None

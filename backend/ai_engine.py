@@ -331,8 +331,10 @@ def generate_signals(ticker="^NSEI"):
         # IV Spikes (Volatility expansion means trend acceleration)
         ce_iv = greeks.get('ce_iv', 0)
         pe_iv = greeks.get('pe_iv', 0)
-        if ce_iv > pe_iv + 5: confidence += 10 # Call IV spiking, extreme bullish demand
-        elif pe_iv > ce_iv + 5: confidence -= 10 # Put IV spiking, extreme fear
+        iv_skew = ce_iv - pe_iv
+        
+        if iv_skew > 3: confidence += 10 # Call IV spiking, extreme bullish demand
+        elif iv_skew < -3: confidence -= 10 # Put IV spiking, extreme fear
         
         # Intraday OI Buildup (Change in OI)
         ce_change = buildup.get('ce_change', 0)
