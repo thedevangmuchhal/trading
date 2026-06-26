@@ -685,6 +685,87 @@
         }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
 
+        /* ═══════════════════════════════════════════
+           TOP ACCENT BAR
+           ═══════════════════════════════════════════ */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 2px;
+            background: linear-gradient(90deg, transparent, var(--ember), transparent);
+            z-index: 200;
+        }
+
+        /* ═══════════════════════════════════════════
+           SIGNAL INSIGHT BAR
+           ═══════════════════════════════════════════ */
+        .signal-insight {
+            font-size: 0.72rem;
+            color: var(--text-secondary);
+            text-align: center;
+            padding: 0.5rem 0.75rem;
+            margin-bottom: 0.75rem;
+            border-radius: 6px;
+            background: rgba(255,255,255,0.02);
+            border: 1px solid var(--glass-border);
+            line-height: 1.5;
+        }
+        .signal-insight strong {
+            color: var(--ember);
+            font-weight: 600;
+        }
+
+        /* ═══════════════════════════════════════════
+           CONFIDENCE LABEL
+           ═══════════════════════════════════════════ */
+        .confidence-label {
+            font-size: 0.65rem;
+            font-weight: 700;
+            letter-spacing: 1.5px;
+            text-transform: uppercase;
+            text-align: center;
+            margin-top: 0.15rem;
+        }
+
+        /* ═══════════════════════════════════════════
+           GAUGE GLOW
+           ═══════════════════════════════════════════ */
+        .gauge-svg {
+            filter: drop-shadow(0 0 8px rgba(245, 158, 11, 0.15));
+        }
+
+        /* ═══════════════════════════════════════════
+           STAT SECTION HEADERS
+           ═══════════════════════════════════════════ */
+        .stat-section {
+            margin-bottom: 1rem;
+        }
+        .stat-section-title {
+            font-size: 0.6rem;
+            color: var(--fog);
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+            margin-bottom: 0.4rem;
+            padding-left: 0.25rem;
+            border-left: 2px solid var(--ember);
+            padding-left: 0.5rem;
+        }
+
+        /* ═══════════════════════════════════════════
+           CARD HOVER
+           ═══════════════════════════════════════════ */
+        .stat-card {
+            transition: border-color 0.2s, background 0.2s;
+        }
+        .stat-card:hover {
+            border-color: rgba(255,255,255,0.1);
+            background: rgba(15, 21, 34, 0.9);
+        }
+
     </style>
 </head>
 <body>
@@ -766,6 +847,11 @@
                         <div id="strikeText" class="strike-text">No trade recommended</div>
                     </div>
 
+                    <!-- Signal Insight -->
+                    <div class="signal-insight" id="signalInsight">
+                        Scanning market conditions…
+                    </div>
+
                     <!-- Arc Confidence Gauge -->
                     <div class="gauge-container">
                         <svg class="gauge-svg" id="gaugeArc" viewBox="0 0 200 115">
@@ -784,12 +870,12 @@
                                   style="transform-origin: 100px 100px; transition: transform 1s ease;"/>
                             <circle cx="100" cy="100" r="4" fill="var(--text-primary)"/>
                             <!-- Value text -->
-                            <text id="gaugeValue" x="100" y="88" text-anchor="middle"
-                                  font-family="'DM Mono', monospace" font-size="22" font-weight="500"
+                            <text id="gaugeValue" x="100" y="85" text-anchor="middle"
+                                  font-family="'DM Mono', monospace" font-size="24" font-weight="500"
                                   fill="var(--text-primary)">--</text>
-                            <text x="100" y="108" text-anchor="middle"
-                                  font-family="'Inter', sans-serif" font-size="8" fill="var(--fog)"
-                                  letter-spacing="1.5" text-transform="uppercase">CONFIDENCE</text>
+                            <text id="gaugeLabel" x="100" y="100" text-anchor="middle"
+                                  font-family="'Inter', sans-serif" font-size="9" font-weight="700"
+                                  fill="var(--fog)" letter-spacing="1.5">NEUTRAL</text>
                             <!-- Min / Max labels -->
                             <text x="18" y="112" text-anchor="middle"
                                   font-family="'DM Mono', monospace" font-size="8" fill="var(--fog)">0</text>
@@ -844,87 +930,97 @@
                 </div>
             </div>
 
-            <!-- ═══════ STATS GRID ═══════ -->
-            <div class="stats-grid">
-                <div class="stat-card">
-                    <div class="stat-label">PCR (OI / Vol)</div>
-                    <div id="pcrVal" class="stat-value">--</div>
+            <!-- ═══════ OPTIONS FLOW ═══════ -->
+            <div class="stat-section">
+                <div class="stat-section-title">Options Flow</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">PCR (OI / Vol)</div>
+                        <div id="pcrVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Max Pain</div>
+                        <div id="maxPainVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Expiry</div>
+                        <div id="expiryVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">OI Buildup</div>
+                        <div id="buildupVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Opt Vol (CE/PE)</div>
+                        <div id="optVolVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">IV (CE / PE)</div>
+                        <div id="ivVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">IV Skew</div>
+                        <div id="ivSkewVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Delta (CE / PE)</div>
+                        <div id="deltaVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">VIX</div>
+                        <div id="vixVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Sentiment</div>
+                        <div id="sentimentVal" class="stat-value">--</div>
+                    </div>
                 </div>
-                <div class="stat-card">
-                    <div class="stat-label">Max Pain</div>
-                    <div id="maxPainVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Expiry</div>
-                    <div id="expiryVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">FII Net (Cr)</div>
-                    <div id="fiiVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">DII Net (Cr)</div>
-                    <div id="diiVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Trend</div>
-                    <div id="trendVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Pattern</div>
-                    <div id="patternVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">RSI</div>
-                    <div id="rsiVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Supertrend</div>
-                    <div id="supertrendVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Vol Surge</div>
-                    <div id="volSurgeVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">OI Buildup</div>
-                    <div id="buildupVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">IV Skew</div>
-                    <div id="ivSkewVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">IV (CE / PE)</div>
-                    <div id="ivVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Delta (CE / PE)</div>
-                    <div id="deltaVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">VIX</div>
-                    <div id="vixVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Sentiment</div>
-                    <div id="sentimentVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Stoch RSI</div>
-                    <div id="stochRsiVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">RSI Divergence</div>
-                    <div id="rsiDivVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">MTF Confluence</div>
-                    <div id="mtfVal" class="stat-value">--</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-label">Opt Vol (CE/PE)</div>
-                    <div id="optVolVal" class="stat-value">--</div>
+            </div>
+
+            <!-- ═══════ TECHNICALS ═══════ -->
+            <div class="stat-section">
+                <div class="stat-section-title">Technical Indicators</div>
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Trend</div>
+                        <div id="trendVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Pattern</div>
+                        <div id="patternVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">RSI</div>
+                        <div id="rsiVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Stoch RSI (K/D)</div>
+                        <div id="stochRsiVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">RSI Divergence</div>
+                        <div id="rsiDivVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Supertrend</div>
+                        <div id="supertrendVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Volume Surge</div>
+                        <div id="volSurgeVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">MTF Confluence</div>
+                        <div id="mtfVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">FII Net</div>
+                        <div id="fiiVal" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">DII Net</div>
+                        <div id="diiVal" class="stat-value">--</div>
+                    </div>
                 </div>
             </div>
 
@@ -1018,6 +1114,7 @@
             const fillEl = document.getElementById('gaugeFill');
             const needleEl = document.getElementById('gaugeNeedle');
             const valueEl = document.getElementById('gaugeValue');
+            const labelEl = document.getElementById('gaugeLabel');
 
             const clamped = Math.max(0, Math.min(100, score));
             const fraction = clamped / 100;
@@ -1025,12 +1122,25 @@
             // Stroke offset
             fillEl.setAttribute('stroke-dashoffset', ARC_LENGTH * (1 - fraction));
 
-            // Colour
-            let color;
-            if (clamped >= 70) color = 'var(--bull)';
-            else if (clamped <= 30) color = 'var(--bear)';
-            else color = 'var(--ember)';
+            // Colour + label
+            let color, label;
+            if (clamped >= 85) { color = 'var(--bull)'; label = 'STRONG BUY'; }
+            else if (clamped >= 70) { color = 'var(--bull)'; label = 'BUY BIAS'; }
+            else if (clamped >= 55) { color = 'var(--ember)'; label = 'LEAN BULLISH'; }
+            else if (clamped >= 45) { color = 'var(--ember)'; label = 'NEUTRAL'; }
+            else if (clamped >= 30) { color = 'var(--ember)'; label = 'LEAN BEARISH'; }
+            else if (clamped >= 15) { color = 'var(--bear)'; label = 'SELL BIAS'; }
+            else { color = 'var(--bear)'; label = 'STRONG SELL'; }
+
             fillEl.setAttribute('stroke', color);
+            labelEl.textContent = label;
+            labelEl.setAttribute('fill', color);
+
+            // Gauge SVG glow matches colour
+            const gaugeEl = document.getElementById('gaugeArc');
+            if (clamped >= 70) gaugeEl.style.filter = 'drop-shadow(0 0 12px rgba(16, 185, 129, 0.25))';
+            else if (clamped <= 30) gaugeEl.style.filter = 'drop-shadow(0 0 12px rgba(239, 68, 68, 0.25))';
+            else gaugeEl.style.filter = 'drop-shadow(0 0 8px rgba(245, 158, 11, 0.15))';
 
             // Needle rotation: -90° (left) to +90° (right)
             const angle = -90 + (fraction * 180);
@@ -1038,6 +1148,55 @@
 
             // Value
             valueEl.textContent = clamped;
+        }
+
+        // ── Signal Insight Generation ────────────────
+        function generateSignalInsight(data) {
+            const parts = [];
+            
+            // Trend
+            if (data.tech_trend) {
+                if (data.tech_trend.includes('Bullish')) parts.push('Price action is <strong>bullish</strong>');
+                else if (data.tech_trend.includes('Bearish')) parts.push('Price action is <strong>bearish</strong>');
+            }
+            
+            // MTF
+            if (data.mtf_confluence) {
+                const match = data.mtf_confluence.match(/(\d+)B\/(\d+)S/);
+                if (match) {
+                    const b = parseInt(match[1]), s = parseInt(match[2]);
+                    if (b >= 3) parts.push('all timeframes aligned bullish');
+                    else if (s >= 3) parts.push('all timeframes aligned bearish');
+                    else if (b === 2) parts.push('higher TFs bullish — pullback possible');
+                    else if (s === 2) parts.push('higher TFs bearish — bounce possible');
+                }
+            }
+
+            // RSI zone
+            if (data.rsi < 30) parts.push('RSI <strong>oversold</strong> (' + data.rsi + ')');
+            else if (data.rsi > 70) parts.push('RSI <strong>overbought</strong> (' + data.rsi + ')');
+
+            // Divergence
+            if (data.rsi_divergence === 'bullish') parts.push('<strong>bullish RSI divergence</strong> detected');
+            else if (data.rsi_divergence === 'bearish') parts.push('<strong>bearish RSI divergence</strong> detected');
+
+            // Supertrend
+            if (data.supertrend_direction === 'Bullish') parts.push('Supertrend supports upside');
+            else if (data.supertrend_direction === 'Bearish') parts.push('Supertrend confirms downside');
+
+            // Volume
+            if (data.volume_surge) parts.push('volume surge at <strong>' + data.volume_ratio + 'x</strong> average');
+
+            // Smart Money
+            if (data.smart_money_score >= 80) parts.push('FII+DII <strong>strong buying</strong>');
+            else if (data.smart_money_score <= 20) parts.push('FII+DII <strong>heavy selling</strong>');
+
+            // IV Crush
+            if (data.iv_crush_warning) parts.push('⚡ <strong>IV crush</strong> — premiums decaying');
+
+            if (parts.length === 0) parts.push('Waiting for stronger confluence across indicators');
+            
+            return parts.join(' · ');
         }
 
         // ── OI Chart (Bidirectional) ────────────────
@@ -1204,6 +1363,9 @@
                 // ── Gauge ──
                 renderArcGauge(data.confidence_score);
 
+                // ── Signal Insight ──
+                document.getElementById('signalInsight').innerHTML = generateSignalInsight(data);
+
                 // ── Score Bars ──
                 setScore('SmartMoney', data.smart_money_score);
                 setScore('Options', data.options_score);
@@ -1253,13 +1415,19 @@
                 // Expiry
                 document.getElementById('expiryVal').innerText = oiData?.expiry || '--';
 
-                // FII / DII
+                // FII / DII (formatted as ₹ Cr)
                 const fiiElem = document.getElementById('fiiVal');
-                fiiElem.innerText = data.fii_net ? data.fii_net : '--';
+                if (data.fii_net) {
+                    const fiiAbs = Math.abs(data.fii_net);
+                    fiiElem.innerText = (data.fii_net > 0 ? '+' : '-') + '₹' + fiiAbs.toLocaleString('en-IN') + ' Cr';
+                } else { fiiElem.innerText = '--'; }
                 fiiElem.className = 'stat-value ' + (data.fii_net > 0 ? 'bullish' : data.fii_net < 0 ? 'bearish' : '');
 
                 const diiElem = document.getElementById('diiVal');
-                diiElem.innerText = data.dii_net ? data.dii_net : '--';
+                if (data.dii_net) {
+                    const diiAbs = Math.abs(data.dii_net);
+                    diiElem.innerText = (data.dii_net > 0 ? '+' : '-') + '₹' + diiAbs.toLocaleString('en-IN') + ' Cr';
+                } else { diiElem.innerText = '--'; }
                 diiElem.className = 'stat-value ' + (data.dii_net > 0 ? 'bullish' : data.dii_net < 0 ? 'bearish' : '');
 
                 // Trend
