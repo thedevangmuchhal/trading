@@ -122,21 +122,21 @@ import ijson
 import urllib.request
 import tempfile
 
-# Global cache for only the filtered NIFTY tokens (saves massive memory)
-angel_filtered_opts = None
+# Global cache for the filtered tokens by base_symbol (saves massive memory)
+angel_filtered_opts_cache = {}
 
 def get_filtered_angel_options(base_symbol):
     """
     Downloads Angel One's massive JSON but streams it to save memory (Render 512MB limit).
     Filters only for options matching the base_symbol and caches the small resulting list.
     """
-    global angel_filtered_opts
+    global angel_filtered_opts_cache
     
     # Base symbol handling (Angel One uses "NIFTY", not "^NSEI")
     angel_base_symbol = "NIFTY" if base_symbol == "^NSEI" else base_symbol
 
-    if angel_filtered_opts is None:
-        print("Streaming Angel One Scrip Master JSON to save memory...")
+    if angel_base_symbol not in angel_filtered_opts_cache:
+        print(f"Streaming Angel One Scrip Master JSON to load {angel_base_symbol} options...")
         try:
             url = "https://margincalculator.angelbroking.com/OpenAPI_File/files/OpenAPIScripMaster.json"
             
@@ -166,19 +166,19 @@ def get_filtered_angel_options(base_symbol):
                 return opts
 
             try:
-                angel_filtered_opts = parse_tokens()
+                angel_filtered_opts_cache[angel_base_symbol] = parse_tokens()
             except Exception as e:
                 print(f"Parsing failed ({e}), redownloading corrupted file...")
                 download_tokens()
-                angel_filtered_opts = parse_tokens()
+                angel_filtered_opts_cache[angel_base_symbol] = parse_tokens()
             
-            print(f"Successfully loaded {len(angel_filtered_opts)} options for {angel_base_symbol}")
+            print(f"Successfully loaded {len(angel_filtered_opts_cache[angel_base_symbol])} options for {angel_base_symbol}")
             
         except Exception as e:
             print("Failed to download or parse Angel tokens:", e)
             return None
             
-    return angel_filtered_opts
+    return angel_filtered_opts_cache[angel_base_symbol]
 
 def get_angel_tokens(base_symbol, current_price):
     """
@@ -248,6 +248,7 @@ def fetch_advanced_oi(ticker_symbol, current_price):
     if ticker_symbol == "^NSEI": base_symbol = "NIFTY"
     elif ticker_symbol == "^BSESN": base_symbol = "SENSEX"
     elif ticker_symbol == "^NSEBANK": base_symbol = "BANKNIFTY"
+    elif ticker_symbol == "NIFTY_FIN_SERVICE.NS": base_symbol = "FINNIFTY"
     elif ticker_symbol.endswith(".NS"): base_symbol = ticker_symbol.replace(".NS", "")
     else:
         return None # Not supported
@@ -494,6 +495,8 @@ def fetch_news(ticker_symbol="^NSEI"):
             query = "nifty stock market india today"
             if "BANK" in ticker_symbol.upper():
                 query = "bank nifty stock market india today"
+            elif ticker_symbol == "NIFTY_FIN_SERVICE.NS":
+                query = "fin nifty stock market india today"
             elif ticker_symbol.endswith(".NS"):
                 stock_name = ticker_symbol.replace(".NS", "")
                 query = f"{stock_name} stock India today"
