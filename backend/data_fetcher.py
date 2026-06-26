@@ -321,12 +321,15 @@ def fetch_advanced_oi(ticker_symbol, current_price):
                     vol_val = item.get("tradeVolume", 0)
                     
                     if strike == atm:
+                        # SmartAPI v2 uses 'ltp' and 'avgPrice'; legacy uses 'lastTradedPrice'
+                        ltp_val = item.get("ltp", item.get("lastTradedPrice", 0))
+                        avg_val = item.get("avgPrice", item.get("averageTradedPrice", 0))
                         if info["type"] == "CE":
-                            atm_ce_ltp = item.get("lastTradedPrice", 0)
-                            atm_ce_vwap = item.get("averageTradedPrice", 0)
+                            atm_ce_ltp = ltp_val
+                            atm_ce_vwap = avg_val
                         else:
-                            atm_pe_ltp = item.get("lastTradedPrice", 0)
-                            atm_pe_vwap = item.get("averageTradedPrice", 0)
+                            atm_pe_ltp = ltp_val
+                            atm_pe_vwap = avg_val
                             
                     # Track Morning OI for buildup
                     cache_key = f"{ticker_symbol}_{strike}_{info['type']}"
@@ -437,8 +440,35 @@ def fetch_advanced_oi(ticker_symbol, current_price):
         
     return None
 
+def _fetch_google_news_rss(query="nifty stock market india", max_items=8):
+    """Fetches real headlines from Google News RSS feed. No extra dependencies."""
+    try:
+        import xml.etree.ElementTree as ET
+        import html
+        url = f"https://news.google.com/rss/search?q={query.replace(' ', '+')}&hl=en-IN&gl=IN&ceid=IN:en"
+        res = requests.get(url, timeout=5, headers={
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        })
+        if res.status_code == 200:
+            root = ET.fromstring(res.content)
+            titles = []
+            for item in root.findall('.//item/title'):
+                if item.text:
+                    cleaned = html.unescape(item.text)
+                    # Remove source attribution (" - Economic Times" etc.)
+                    if ' - ' in cleaned:
+                        cleaned = cleaned.rsplit(' - ', 1)[0]
+                    titles.append(cleaned.strip())
+                if len(titles) >= max_items:
+                    break
+            return titles
+    except Exception as e:
+        print(f"Google News RSS error: {e}")
+    return []
+
 def fetch_news(ticker_symbol="^NSEI"):
     try:
+        # Try Yahoo Finance first
         ticker = yf.Ticker(ticker_symbol, session=session)
         news_items = ticker.news
         headlines = []
@@ -448,14 +478,19 @@ def fetch_news(ticker_symbol="^NSEI"):
                 if title:
                     headlines.append(title)
         
-        if not headlines:
-            headlines = [
-                "Markets trade in a tight range ahead of global cues",
-                "FIIs remain active in the derivatives market",
-                "Option sellers dominate out-of-the-money strikes",
-                "Institutional volume steadily rising at VWAP levels"
-            ]
-        return headlines
+        # Fallback: Google News RSS for real Indian market headlines
+        if not headlines or len(headlines) < 3:
+            query = "nifty stock market india today"
+            if "BANK" in ticker_symbol.upper():
+                query = "bank nifty stock market india today"
+            elif ticker_symbol.endswith(".NS"):
+                stock_name = ticker_symbol.replace(".NS", "")
+                query = f"{stock_name} stock India today"
+            google_headlines = _fetch_google_news_rss(query)
+            if google_headlines:
+                headlines = google_headlines
+        
+        return headlines[:8]  # Return up to 8 for frontend to pick 5
     except Exception as e:
         print(f"Error fetching news: {e}")
         return []
