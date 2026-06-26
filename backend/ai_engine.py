@@ -325,8 +325,8 @@ def generate_signals(ticker="^NSEI"):
 
     # 9. Hedge-Fund Grade Greeks & Buildup Logic (Max +/- 30)
     if oi_metrics and 'greeks' in oi_metrics:
-        greeks = oi_metrics['greeks']
-        buildup = oi_metrics['buildup']
+        greeks = oi_metrics.get('greeks', {})
+        buildup = oi_metrics.get('buildup', {})
         
         # IV Spikes (Volatility expansion means trend acceleration)
         ce_iv = greeks.get('ce_iv', 0)
