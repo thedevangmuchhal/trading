@@ -71,7 +71,7 @@ def get_oi(ticker: str = "^NSEI"):
         return {"oi_data": [], "pcr": None, "error": "Angel One not connected. Check ENV variables."}
     
     # Get current price from yfinance
-    df = fetch_market_data(ticker, interval="15m", period="1d")
+    df = fetch_market_data(ticker, interval="15m", period="5d")
     if df.empty:
         return {"oi_data": [], "pcr": None}
     current_price = float(df["Close"].iloc[-1])
