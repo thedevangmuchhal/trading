@@ -12,7 +12,7 @@ def analyze_sentiment(headlines):
     for title in headlines:
         score = analyzer.polarity_scores(title)
         total_compound += score['compound']
-    avg_compound = total_compound / len(headlines)
+    avg_compound = total_compound / len(headlines) if headlines else 0
     return round(avg_compound * 100, 2)
 
 def calculate_rsi(data, window=14):
@@ -41,7 +41,6 @@ def calculate_macd(data):
     return macd, signal_line, histogram
 
 def calculate_adx(df, window=14):
-    # Average Directional Index (ADX) to measure trend strength
     high_diff = df['High'].diff()
     low_diff = df['Low'].diff()
     
@@ -62,7 +61,7 @@ def calculate_adx(df, window=14):
 
 def calculate_vwap(df):
     if df['Volume'].sum() == 0:
-        return pd.Series(index=df.index, dtype=float) # No volume data
+        return pd.Series(index=df.index, dtype=float) 
     q = df['Volume']
     p = (df['High'] + df['Low'] + df['Close']) / 3
     return (p * q).cumsum() / q.cumsum()
@@ -97,18 +96,12 @@ def analyze_technicals(df):
     shadow_upper = df['High'] - df[['Close', 'Open']].max(axis=1)
     shadow_lower = df[['Close', 'Open']].min(axis=1) - df['Low']
     
-    # Doji: body is very small compared to shadows
     df['Is_Doji'] = body < (0.1 * (df['High'] - df['Low']))
-    
-    # Hammer: small body, long lower shadow (at least 2x body), very short upper shadow
     df['Is_Hammer'] = (shadow_lower > (2 * body)) & (shadow_upper < (0.2 * body))
     
-    # Engulfing (comparing to previous candle)
     prev_body = (df['Close'].shift(1) - df['Open'].shift(1))
     curr_body = (df['Close'] - df['Open'])
-    # Bullish Engulfing: prev red, curr green, curr body engulfs prev body
     df['Bullish_Engulfing'] = (prev_body < 0) & (curr_body > 0) & (df['Close'] > df['Open'].shift(1)) & (df['Open'] < df['Close'].shift(1))
-    # Bearish Engulfing: prev green, curr red, curr body engulfs prev body
     df['Bearish_Engulfing'] = (prev_body > 0) & (curr_body < 0) & (df['Close'] < df['Open'].shift(1)) & (df['Open'] > df['Close'].shift(1))
 
     latest = df.iloc[-1]
@@ -134,6 +127,28 @@ def analyze_technicals(df):
     elif latest['Is_Hammer']: chart_pattern = "Hammer"
     elif latest['Is_Doji']: chart_pattern = "Doji"
 
+    # Pine Script ORB Logic (Opening Range Breakout)
+    orb_breakout = "None"
+    or_high = None
+    or_low = None
+    try:
+        today = df.index[-1].date()
+        today_df = df[df.index.date == today]
+        # Get candles before 10:00 AM (first 45 mins)
+        or_df = today_df.between_time("09:15", "10:00", inclusive="left")
+        if not or_df.empty:
+            or_high = or_df['High'].max()
+            or_low = or_df['Low'].min()
+            
+            # If current time is after 10:00 AM, check for breakout
+            if latest.name.time() >= pd.to_datetime("10:00").time():
+                if current_price > or_high:
+                    orb_breakout = "Bullish"
+                elif current_price < or_low:
+                    orb_breakout = "Bearish"
+    except Exception as e:
+        pass
+
     high = df['High'].max()
     low = df['Low'].min()
     close = latest['Close']
@@ -147,6 +162,9 @@ def analyze_technicals(df):
         "trend": trend,
         "momentum": momentum,
         "chart_pattern": chart_pattern,
+        "orb_breakout": orb_breakout,
+        "or_high": or_high,
+        "or_low": or_low,
         "ema_9": round(latest['EMA_9'], 2),
         "ema_21": round(latest['EMA_21'], 2),
         "bb_upper": round(latest['BB_Upper'], 2) if not pd.isna(latest['BB_Upper']) else None,
@@ -168,7 +186,7 @@ def generate_signals(ticker="^NSEI"):
     df_1h = fetch_market_data(ticker, interval="1h")
     
     headlines = fetch_news(ticker)
-    sentiment_score = analyze_sentiment(headlines)
+    sentiment_val = analyze_sentiment(headlines)
     
     tech_data = analyze_technicals(df_15m)
     if not tech_data:
@@ -189,18 +207,15 @@ def generate_signals(ticker="^NSEI"):
     # Fetch VIX Data
     vix_data = fetch_vix()
 
-    # Base Confidence
-    confidence = 50 
+    # Initialize Combo Scores
+    smart_money_score = 50
+    options_score = 50
+    technical_score = 50
+    sentiment_score = 50
     
-    # 0. Macro Event Risk & FII/DII Logic
-    event_warning = False
-    event_keywords = ["rbi", "fed", "policy", "rate", "budget", "cpi", "inflation", "election", "war", "crash"]
-    for headline in headlines:
-        if any(keyword in headline.lower() for keyword in event_keywords):
-            event_warning = True
-            confidence -= 30  # Slash confidence heavily on event days due to unpredictable volatility
-            break
-            
+    # -----------------------------------------------------
+    # SMART MONEY SCORE (Institutions)
+    # -----------------------------------------------------
     fii_dii_data = fetch_fii_dii()
     fii_net = 0
     dii_net = 0
@@ -214,209 +229,189 @@ def generate_signals(ticker="^NSEI"):
             except:
                 pass
                 
-        # FII & DII acting together is a strong trend predictor
         if fii_net > 0 and dii_net > 0:
-            confidence += 15  # Both buying, massive institutional support
+            smart_money_score += 25
         elif fii_net < 0 and dii_net < 0:
-            confidence -= 15  # Both selling, massive institutional dumping
-        elif fii_net > 5000:
-            confidence += 10  # Massive FII solo buying
-        elif fii_net < -5000:
-            confidence -= 10  # Massive FII solo selling
-            
-    # ML Engine Probability
-    ml_prob = predict_breakout_probability(tech_data)
-    if ml_prob is not None:
-        if ml_prob > 0.75: confidence += 15
-        elif ml_prob > 0.60: confidence += 5
-        elif ml_prob < 0.25: confidence -= 15
-        elif ml_prob < 0.40: confidence -= 5
-    
-    # MTF Confluence Check
-    if tech_data['trend'] == "Bullish" and macro_trend == "Bearish":
-        confidence -= 20 # Bull Trap Detected
-    elif tech_data['trend'] == "Bearish" and macro_trend == "Bullish":
-        confidence += 20 # Bear Trap Detected / Dip Buying
+            smart_money_score -= 25
         
-    # VIX Theta Trap Check
-    if vix_data['pct_change'] < -3.0:
-        confidence -= 20 # VIX Crashing, Option Premium Melting
+        if fii_net > 5000: smart_money_score += 15
+        elif fii_net < -5000: smart_money_score -= 15
+        if dii_net > 5000: smart_money_score += 10
+        elif dii_net < -5000: smart_money_score -= 10
+
+    # -----------------------------------------------------
+    # SENTIMENT SCORE
+    # -----------------------------------------------------
+    event_warning = False
+    event_keywords = ["rbi", "fed", "policy", "rate", "budget", "cpi", "inflation", "election", "war", "crash"]
+    for headline in headlines:
+        if any(keyword in headline.lower() for keyword in event_keywords):
+            event_warning = True
+            sentiment_score -= 30
+            break
+            
+    sentiment_score += (sentiment_val * 0.4) # Scale sentiment (-100 to 100)
     
-    # 1. Sentiment Weight (Max +/- 10)
-    if sentiment_score > 20: confidence += 10
-    elif sentiment_score > 5: confidence += 5
-    elif sentiment_score < -20: confidence -= 10
-    elif sentiment_score < -5: confidence -= 5
-
-    # 2. Trend Weight (Max +/- 15)
-    if tech_data['trend'] == "Bullish": confidence += 15
-    elif tech_data['trend'] == "Bearish": confidence -= 15
-
-    # 3. MACD Momentum Weight (Max +/- 10)
-    if tech_data['momentum'] == "Strong Bullish": confidence += 10
-    elif tech_data['momentum'] == "Strong Bearish": confidence -= 10
-    
-    # 4. Bollinger Band Mean Reversion (Max +/- 10)
-    if tech_data['bb_lower'] and current_price < tech_data['bb_lower']: confidence += 10 # Oversold, buy
-    if tech_data['bb_upper'] and current_price > tech_data['bb_upper']: confidence -= 10 # Overbought, sell
-
-    # 5. VPVR & VWAP Institutional Volume Filter (Max +/- 10)
-    if poc is not None:
-        if current_price > poc: confidence += 5
-        else: confidence -= 5
-    if tech_data['vwap'] is not None and not np.isnan(tech_data['vwap']):
-        if current_price > tech_data['vwap']: confidence += 5
-        else: confidence -= 5
-
-    # 6. Chart Patterns (Max +/- 15)
-    if tech_data['chart_pattern'] == "Bullish Engulfing": confidence += 15
-    elif tech_data['chart_pattern'] == "Hammer": confidence += 10
-    elif tech_data['chart_pattern'] == "Bearish Engulfing": confidence -= 15
-
-    # 7. Advanced Options OI Logic (Max +/- 25)
+    if vix_data and 'pct_change' in vix_data:
+        if vix_data['pct_change'] < -3.0:
+            sentiment_score -= 15 # VIX Crashing, Option Premium Melting
+        elif vix_data['pct_change'] > 3.0:
+            sentiment_score += 10 # VIX Rising, Fear increasing
+        
+    # -----------------------------------------------------
+    # OPTIONS SCORE
+    # -----------------------------------------------------
     pcr = None
-    if oi_metrics:
-        pcr = oi_metrics['pcr']
-        if pcr is not None:
-            if pcr > 1.2: confidence += 15
-            elif pcr > 1.0: confidence += 5
-            elif pcr < 0.6: confidence -= 15
-            elif pcr < 0.8: confidence -= 5
-            
-        # OI Support/Resistance Bounce
-        if oi_metrics['highest_pe_strike'] > 0 and abs(current_price - oi_metrics['highest_pe_strike']) < (tech_data['atr'] * 0.5):
-            confidence += 10 # Bouncing off highest Put OI (Support)
-        if oi_metrics['highest_ce_strike'] > 0 and abs(current_price - oi_metrics['highest_ce_strike']) < (tech_data['atr'] * 0.5):
-            confidence -= 10 # Reversing off highest Call OI (Resistance)
-            
-        # Max Pain Magnetism
-        if oi_metrics['max_pain'] > 0:
-            if current_price < (oi_metrics['max_pain'] - tech_data['atr']):
-                confidence += 5 # Price below max pain, gravitate up
-            elif current_price > (oi_metrics['max_pain'] + tech_data['atr']):
-                confidence -= 5 # Price above max pain, gravitate down
-
-    # 8. Volume PCR & Option Premium Momentum (Angel One VWAP) (Max +/- 25)
     vpcr = None
     if oi_metrics:
+        pcr = oi_metrics.get('pcr')
+        if pcr is not None:
+            if pcr > 1.2: options_score += 25
+            elif pcr > 1.0: options_score += 10
+            elif pcr < 0.6: options_score -= 25
+            elif pcr < 0.8: options_score -= 10
+            
+        # Max Pain Magnetism
+        if oi_metrics.get('max_pain', 0) > 0:
+            if current_price < (oi_metrics['max_pain'] - tech_data['atr']):
+                options_score += 15
+            elif current_price > (oi_metrics['max_pain'] + tech_data['atr']):
+                options_score -= 15
+
+        # VWAP & VPCR
         total_ce_vol = oi_metrics.get('total_ce_vol', 0)
         total_pe_vol = oi_metrics.get('total_pe_vol', 0)
         if total_ce_vol > 0:
             vpcr = round(total_pe_vol / total_ce_vol, 2)
-            if vpcr > 1.2: confidence += 10
-            elif vpcr < 0.8: confidence -= 10
+            if vpcr > 1.2: options_score += 15
+            elif vpcr < 0.8: options_score -= 15
             
-        atm_ce_ltp = oi_metrics.get('atm_ce_ltp', 0)
-        atm_ce_vwap = oi_metrics.get('atm_ce_vwap', 0)
-        atm_pe_ltp = oi_metrics.get('atm_pe_ltp', 0)
-        atm_pe_vwap = oi_metrics.get('atm_pe_vwap', 0)
-        
-        # CE VWAP Momentum (Bullish)
-        if atm_ce_ltp > 0 and atm_ce_vwap > 0 and atm_ce_ltp > atm_ce_vwap:
-            confidence += 5 # Calls are trading above VWAP
-        elif atm_ce_ltp > 0 and atm_ce_vwap > 0 and atm_ce_ltp < atm_ce_vwap:
-            confidence -= 5 # Calls are fading
-            
-        # PE VWAP Momentum (Bearish)
-        if atm_pe_ltp > 0 and atm_pe_vwap > 0 and atm_pe_ltp > atm_pe_vwap:
-            confidence -= 10 # Puts are aggressively bought (Bearish for market)
-        elif atm_pe_ltp > 0 and atm_pe_vwap > 0 and atm_pe_ltp < atm_pe_vwap:
-            confidence += 5 # Puts are fading
-
-    # 9. Hedge-Fund Grade Greeks & Buildup Logic (Max +/- 30)
-    if oi_metrics and 'greeks' in oi_metrics:
-        greeks = oi_metrics.get('greeks', {})
-        buildup = oi_metrics.get('buildup', {})
-        
-        # IV Spikes (Volatility expansion means trend acceleration)
-        ce_iv = greeks.get('ce_iv', 0)
-        pe_iv = greeks.get('pe_iv', 0)
-        iv_skew = ce_iv - pe_iv
-        
-        if iv_skew > 3: confidence += 10 # Call IV spiking, extreme bullish demand
-        elif iv_skew < -3: confidence -= 10 # Put IV spiking, extreme fear
-        
         # Intraday OI Buildup (Change in OI)
+        buildup = oi_metrics.get('buildup', {})
         ce_change = buildup.get('ce_change', 0)
         pe_change = buildup.get('pe_change', 0)
-        
-        # Aggressive Call Writing Buildup (Bearish)
         if ce_change > pe_change * 1.5 and ce_change > 0:
-            confidence -= 10
-        # Aggressive Put Writing Buildup (Bullish)
+            options_score -= 15 # Aggressive Call Writing (Bearish)
         elif pe_change > ce_change * 1.5 and pe_change > 0:
-            confidence += 10
+            options_score += 15 # Aggressive Put Writing (Bullish)
             
-    # 10. Yesterday's Breakout (Macro Prediction)
-    try:
-        daily_df = fetch_market_data(ticker, period="5d", interval="1d")
-        if not daily_df.empty and len(daily_df) >= 2:
-            yesterday_candle = daily_df.iloc[-2]
-            y_high = yesterday_candle['High']
-            y_low = yesterday_candle['Low']
-            
-            if current_price > y_high:
-                confidence += 15 # Breaking yesterday's high, massive bullish momentum
-            elif current_price < y_low:
-                confidence -= 15 # Breaking yesterday's low, massive bearish momentum
-    except Exception as e:
-        pass
+        # IV Skew
+        greeks = oi_metrics.get('greeks', {})
+        iv_skew = greeks.get('ce_iv', 0) - greeks.get('pe_iv', 0)
+        if iv_skew > 3: options_score += 15
+        elif iv_skew < -3: options_score -= 15
 
-    # 9. ADX Choppy Market Filter (OVERRIDE)
+    # -----------------------------------------------------
+    # TECHNICAL SCORE & PINE SCRIPT ORB LOGIC
+    # -----------------------------------------------------
+    if tech_data['trend'] == "Bullish": technical_score += 15
+    elif tech_data['trend'] == "Bearish": technical_score -= 15
+
+    if tech_data['momentum'] == "Strong Bullish": technical_score += 10
+    elif tech_data['momentum'] == "Strong Bearish": technical_score -= 10
+    
+    if tech_data['bb_lower'] and current_price < tech_data['bb_lower']: technical_score += 10
+    if tech_data['bb_upper'] and current_price > tech_data['bb_upper']: technical_score -= 10
+
+    if poc is not None:
+        if current_price > poc: technical_score += 10
+        else: technical_score -= 10
+        
+    if tech_data['vwap'] is not None and not np.isnan(tech_data['vwap']):
+        if current_price > tech_data['vwap']: technical_score += 10
+        else: technical_score -= 10
+
+    if tech_data['chart_pattern'] == "Bullish Engulfing": technical_score += 15
+    elif tech_data['chart_pattern'] == "Hammer": technical_score += 10
+    elif tech_data['chart_pattern'] == "Bearish Engulfing": technical_score -= 15
+
+    # PINE SCRIPT ORB Integration
+    if tech_data['orb_breakout'] == "Bullish": technical_score += 30
+    elif tech_data['orb_breakout'] == "Bearish": technical_score -= 30
+
+    ml_prob = predict_breakout_probability(tech_data)
+    if ml_prob is not None:
+        if ml_prob > 0.75: technical_score += 20
+        elif ml_prob > 0.60: technical_score += 10
+        elif ml_prob < 0.25: technical_score -= 20
+        elif ml_prob < 0.40: technical_score -= 10
+
+    # MTF Confluence Check
+    if tech_data['trend'] == "Bullish" and macro_trend == "Bearish":
+        technical_score -= 20 # Bull Trap
+    elif tech_data['trend'] == "Bearish" and macro_trend == "Bullish":
+        technical_score += 20 # Bear Trap
+        
     market_condition = "Trending"
     if tech_data['adx'] < 20:
-        confidence -= 50 
+        technical_score -= 30 
         market_condition = "Choppy/Sideways"
 
-    # Clamp confidence to 0-100
-    confidence = max(0, min(100, confidence))
+    # Clamp scores
+    smart_money_score = int(max(0, min(100, smart_money_score)))
+    options_score = int(max(0, min(100, options_score)))
+    technical_score = int(max(0, min(100, technical_score)))
+    sentiment_score = int(max(0, min(100, sentiment_score)))
 
-    # Stricter Signal Generation for higher accuracy
+    # Calculate global confidence average
+    confidence = int((smart_money_score + options_score + technical_score + sentiment_score) / 4)
+
+    # -----------------------------------------------------
+    # ACTION TRIGGER COMBO LOGIC
+    # -----------------------------------------------------
     action = "WAIT"
     strike_type = None
-    if confidence >= 80: 
+
+    if smart_money_score >= 80 and options_score >= 60:
         action = "BUY"
         strike_type = "CE"
-    elif confidence <= 20: 
-        action = "SELL" 
+        confidence = max(confidence, 85) # Smart Money Override
+    elif smart_money_score <= 20 and options_score <= 40:
+        action = "SELL"
+        strike_type = "PE"
+        confidence = min(confidence, 15)
+        
+    elif technical_score >= 80 and options_score >= 55:
+        action = "BUY"
+        strike_type = "CE"
+        confidence = max(confidence, 80) # Pine Script Breakout Override
+    elif technical_score <= 20 and options_score <= 45:
+        action = "SELL"
+        strike_type = "PE"
+        confidence = min(confidence, 20)
+        
+    elif confidence >= 75:
+        action = "BUY"
+        strike_type = "CE"
+    elif confidence <= 25:
+        action = "SELL"
         strike_type = "PE"
 
     import math
     atm_strike = round(current_price / 100) * 100
     strike_price = atm_strike
-    
     atr = tech_data['atr']
     
     if action == "BUY":
-        # Institutional Strike Logic: Buy In-The-Money (ITM) for higher Delta and safety
         strike_price = math.floor(current_price / 100) * 100
         entry = current_price
-        
-        # Target Resistance (Highest Call OI)
-        if oi_metrics and oi_metrics.get('highest_ce_strike') > entry:
+        if oi_metrics and oi_metrics.get('highest_ce_strike') and oi_metrics.get('highest_ce_strike') > entry:
             target = oi_metrics['highest_ce_strike']
         else:
             target = entry + (atr * 3.0)
-            
-        # Stop Loss Support (Highest Put OI)
-        if oi_metrics and oi_metrics.get('highest_pe_strike') > 0 and oi_metrics.get('highest_pe_strike') < entry:
-            stop_loss = max(oi_metrics['highest_pe_strike'], entry - (atr * 2.0)) # Don't let SL get too wide
+        if oi_metrics and oi_metrics.get('highest_pe_strike', 0) > 0 and oi_metrics.get('highest_pe_strike') < entry:
+            stop_loss = max(oi_metrics['highest_pe_strike'], entry - (atr * 2.0))
         else:
             stop_loss = entry - (atr * 1.5)
             
     elif action == "SELL":
-        # Institutional Strike Logic: Buy In-The-Money (ITM) for higher Delta and safety
         strike_price = math.ceil(current_price / 100) * 100
         entry = current_price
-        
-        # Target Support (Highest Put OI)
-        if oi_metrics and oi_metrics.get('highest_pe_strike') > 0 and oi_metrics.get('highest_pe_strike') < entry:
+        if oi_metrics and oi_metrics.get('highest_pe_strike', 0) > 0 and oi_metrics.get('highest_pe_strike') < entry:
             target = oi_metrics['highest_pe_strike']
         else:
             target = entry - (atr * 3.0) 
-            
-        # Stop Loss Resistance (Highest Call OI)
-        if oi_metrics and oi_metrics.get('highest_ce_strike') > entry:
+        if oi_metrics and oi_metrics.get('highest_ce_strike') and oi_metrics.get('highest_ce_strike') > entry:
             stop_loss = min(oi_metrics['highest_ce_strike'], entry + (atr * 2.0))
         else:
             stop_loss = entry + (atr * 1.5) 
@@ -427,15 +422,23 @@ def generate_signals(ticker="^NSEI"):
         "timestamp": pd.Timestamp.now().isoformat(),
         "ticker": ticker,
         "current_price": current_price,
-        "sentiment_score": sentiment_score,
+        "sentiment_score_raw": sentiment_val,
         "tech_trend": f"{tech_data['trend']} ({tech_data['momentum']}) [{market_condition}]",
         "market_condition": market_condition,
         "rsi": tech_data['rsi'],
-        "confidence_score": int(confidence),
+        
+        "confidence_score": confidence,
+        "smart_money_score": smart_money_score,
+        "options_score": options_score,
+        "technical_score": technical_score,
+        "sentiment_score": sentiment_score,
+        
         "pcr": pcr,
         "vpcr": vpcr,
         "max_pain": oi_metrics['max_pain'] if oi_metrics else None,
         "chart_pattern": tech_data['chart_pattern'],
+        "orb_breakout": tech_data['orb_breakout'],
+        
         "action": action,
         "strike_recommendation": f"{strike_price} {strike_type}" if strike_type else "None",
         "entry_level": round(entry, 2),

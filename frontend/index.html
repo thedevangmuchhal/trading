@@ -147,6 +147,47 @@
             margin-bottom: 0.75rem;
         }
 
+        /* Score Breakdown */
+        .score-breakdown {
+            background: var(--card-bg);
+            padding: 1rem;
+            border-radius: 10px;
+            margin-bottom: 1rem;
+        }
+        .score-row {
+            display: flex;
+            align-items: center;
+            margin-bottom: 0.8rem;
+        }
+        .score-row:last-child { margin-bottom: 0; }
+        .score-label {
+            width: 35%;
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            font-weight: 600;
+        }
+        .score-bar-bg {
+            flex: 1;
+            height: 10px;
+            background: rgba(255,255,255,0.05);
+            border-radius: 5px;
+            overflow: hidden;
+            margin: 0 1rem;
+            position: relative;
+        }
+        .score-bar-fill {
+            height: 100%;
+            background: var(--accent);
+            border-radius: 5px;
+            transition: width 0.5s ease, background 0.5s ease;
+        }
+        .score-val {
+            width: 15%;
+            text-align: right;
+            font-size: 0.8rem;
+            font-weight: 700;
+        }
+
         /* Stats Grid */
         .stats-grid {
             display: grid;
@@ -275,6 +316,30 @@
             <div id="signalBox" class="signal-box wait">
                 <h2 id="actionText" class="action-text">WAIT</h2>
                 <div id="strikeText" class="strike-text">No Trade Recommended</div>
+            </div>
+
+            <!-- Score Breakdown -->
+            <div class="score-breakdown">
+                <div class="score-row">
+                    <div class="score-label">🏦 Smart Money Score (Institutions)</div>
+                    <div class="score-bar-bg"><div id="barSmartMoney" class="score-bar-fill" style="width:50%"></div></div>
+                    <div id="valSmartMoney" class="score-val">50/100</div>
+                </div>
+                <div class="score-row">
+                    <div class="score-label">📊 Options Score (Max Pain, PCR)</div>
+                    <div class="score-bar-bg"><div id="barOptions" class="score-bar-fill" style="width:50%"></div></div>
+                    <div id="valOptions" class="score-val">50/100</div>
+                </div>
+                <div class="score-row">
+                    <div class="score-label">📈 Technical Score (Chart & ORB)</div>
+                    <div class="score-bar-bg"><div id="barTechnical" class="score-bar-fill" style="width:50%"></div></div>
+                    <div id="valTechnical" class="score-val">50/100</div>
+                </div>
+                <div class="score-row">
+                    <div class="score-label">📰 Sentiment Score (News & VIX)</div>
+                    <div class="score-bar-bg"><div id="barSentiment" class="score-bar-fill" style="width:50%"></div></div>
+                    <div id="valSentiment" class="score-val">50/100</div>
+                </div>
             </div>
 
             <div class="levels">
@@ -522,6 +587,21 @@
                 const confElem = document.getElementById('confidenceVal');
                 confElem.innerText = data.confidence_score + ' / 100';
                 confElem.className = 'stat-value ' + (data.confidence_score >= 70 ? 'bullish' : data.confidence_score <= 30 ? 'bearish' : '');
+                
+                // --- Score Breakdown ---
+                const setScore = (id, val) => {
+                    document.getElementById('val' + id).innerText = (val || 0) + '/100';
+                    const bar = document.getElementById('bar' + id);
+                    bar.style.width = (val || 0) + '%';
+                    if (val >= 70) bar.style.background = 'var(--green)';
+                    else if (val <= 30) bar.style.background = 'var(--red)';
+                    else bar.style.background = 'var(--accent)';
+                };
+                
+                setScore('SmartMoney', data.smart_money_score);
+                setScore('Options', data.options_score);
+                setScore('Technical', data.technical_score);
+                setScore('Sentiment', data.sentiment_score);
                 
                 // --- Event Warning ---
                 document.getElementById('eventBanner').style.display = data.event_warning ? 'block' : 'none';
