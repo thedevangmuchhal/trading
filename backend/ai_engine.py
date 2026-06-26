@@ -434,20 +434,23 @@ def generate_signals(ticker="^NSEI"):
         "union budget", "budget 2025", "budget 2026",
         "cpi data", "cpi print", "inflation surge", "inflation spike",
         "election result", "election outcome",
-        "war", "conflict", "missile", "attack",
-        "crash", "circuit breaker", "black swan", "panic sell"
+        "circuit breaker", "black swan", "panic sell"
     ]
-    single_event_words = ["crash", "war", "fomc"]  # These alone are significant enough
+    single_event_words = ["crash", "war", "fomc", "conflict", "missile", "attack"]  # These alone are significant enough
+    import re
     for headline in headlines:
         hl = headline.lower()
+        # Remove punctuation for clean word boundary checks
+        hl_clean = re.sub(r'[^\w\s]', ' ', hl)
+        
         phrase_match = any(phrase in hl for phrase in event_phrases)
-        # For single words, use word boundary check
+        # For single words, use word boundary check on the cleaned text
         word_match = any(
-            f" {w} " in f" {hl} " for w in single_event_words
+            f" {w} " in f" {hl_clean} " for w in single_event_words
         )
         if phrase_match or word_match:
             event_warning = True
-            sentiment_score -= 25  # Reduced from -30, less aggressive
+            # Removed sentiment penalty: user wants to see raw score and evaluate events manually
             break
             
     sentiment_score += (sentiment_val * 0.4) # Scale sentiment (-100 to 100)
