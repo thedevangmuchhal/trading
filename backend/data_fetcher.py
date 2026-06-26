@@ -82,7 +82,7 @@ def fetch_market_data(ticker_symbol="^NSEI", interval="15m", period="5d"):
     Fetches candlestick data with a 60-second cache to avoid Yahoo rate-limiting.
     """
     cache_key = f"{ticker_symbol}_{interval}_{period}"
-    now = _time.time()
+    now = time.time()
     
     if cache_key in _market_cache:
         cached = _market_cache[cache_key]
