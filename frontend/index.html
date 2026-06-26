@@ -1434,7 +1434,7 @@
                 }
 
                 // Expiry
-                document.getElementById('expiryVal').innerText = oiData?.expiry || '--';
+                document.getElementById('expiryVal').innerText = data.expiry || '--';
 
                 // FII / DII (formatted as ₹ Cr)
                 const fiiElem = document.getElementById('fiiVal');
@@ -1525,9 +1525,9 @@
 
                 // OI Buildup
                 const buildupElem = document.getElementById('buildupVal');
-                if (oiData && oiData.buildup) {
-                    const ceChg = oiData.buildup.ce_change || 0;
-                    const peChg = oiData.buildup.pe_change || 0;
+                if (data.buildup) {
+                    const ceChg = data.buildup.ce_change || 0;
+                    const peChg = data.buildup.pe_change || 0;
                     if (peChg > ceChg * 1.2) {
                         buildupElem.innerText = 'Put Writing ↑';
                         buildupElem.className = 'stat-value bullish';
@@ -1548,20 +1548,20 @@
                 const ivElem = document.getElementById('ivVal');
                 const ivSkewElem = document.getElementById('ivSkewVal');
 
-                if (oiData && oiData.total_ce_vol !== undefined) {
-                    const ceVol = oiData.total_ce_vol;
-                    const peVol = oiData.total_pe_vol;
+                if (data.total_ce_vol !== undefined && data.total_ce_vol !== null) {
+                    const ceVol = data.total_ce_vol;
+                    const peVol = data.total_pe_vol;
                     optVolElem.innerText = (ceVol / 1000000).toFixed(1) + 'M / ' + (peVol / 1000000).toFixed(1) + 'M';
                     optVolElem.className = 'stat-value ' + (peVol > ceVol * 1.1 ? 'bullish' : ceVol > peVol * 1.1 ? 'bearish' : '');
 
-                    if (oiData.greeks) {
-                        deltaElem.innerText = `${oiData.greeks.ce_delta} / ${oiData.greeks.pe_delta}`;
-                        deltaElem.className = 'stat-value ' + (Math.abs(oiData.greeks.ce_delta) > Math.abs(oiData.greeks.pe_delta) ? 'bullish' : 'bearish');
+                    if (data.greeks) {
+                        deltaElem.innerText = `${data.greeks.ce_delta} / ${data.greeks.pe_delta}`;
+                        deltaElem.className = 'stat-value ' + (Math.abs(data.greeks.ce_delta) > Math.abs(data.greeks.pe_delta) ? 'bullish' : 'bearish');
 
-                        ivElem.innerText = `${oiData.greeks.ce_iv}% / ${oiData.greeks.pe_iv}%`;
-                        ivElem.className = 'stat-value ' + (oiData.greeks.ce_iv > oiData.greeks.pe_iv * 1.1 ? 'bullish' : oiData.greeks.pe_iv > oiData.greeks.ce_iv * 1.1 ? 'bearish' : '');
+                        ivElem.innerText = `${data.greeks.ce_iv}% / ${data.greeks.pe_iv}%`;
+                        ivElem.className = 'stat-value ' + (data.greeks.ce_iv > data.greeks.pe_iv * 1.1 ? 'bullish' : data.greeks.pe_iv > data.greeks.ce_iv * 1.1 ? 'bearish' : '');
 
-                        const skew = (oiData.greeks.ce_iv - oiData.greeks.pe_iv).toFixed(1);
+                        const skew = (data.greeks.ce_iv - data.greeks.pe_iv).toFixed(1);
                         ivSkewElem.innerText = skew + '%';
                         ivSkewElem.className = 'stat-value ' + (skew > 2 ? 'bullish' : skew < -2 ? 'bearish' : '');
                     }
