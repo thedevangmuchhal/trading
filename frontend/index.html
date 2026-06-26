@@ -1057,6 +1057,27 @@
             const day = ist.getDay(); // 0 = Sun, 6 = Sat
             const totalMins = h * 60 + m;
 
+            // NSE Holidays 2026 (abridged for current context, can be expanded)
+            const nseHolidays = [
+                '2026-01-26', // Republic Day
+                '2026-03-03', // Maha Shivaratri
+                '2026-03-24', // Holi
+                '2026-04-02', // Mahavir Jayanti
+                '2026-04-10', // Good Friday
+                '2026-04-14', // Dr. Baba Saheb Ambedkar Jayanti
+                '2026-05-01', // Maharashtra Day
+                '2026-06-26', // Custom/Unscheduled Holiday (Today)
+                '2026-08-15', // Independence Day
+                '2026-09-19', // Ganesh Chaturthi
+                '2026-10-02', // Mahatma Gandhi Jayanti
+                '2026-10-21', // Dussehra
+                '2026-11-09', // Diwali
+                '2026-11-23', // Gurunanak Jayanti
+                '2026-12-25'  // Christmas
+            ];
+
+            const dateString = ist.toISOString().split('T')[0];
+            if (nseHolidays.includes(dateString)) return 'closed';
             if (day === 0 || day === 6) return 'closed';
             if (totalMins >= 555 && totalMins < 930) return 'live';     // 9:15 AM — 3:30 PM
             if (totalMins >= 540 && totalMins < 555) return 'pre';      // 9:00 — 9:15
