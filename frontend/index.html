@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI Trading Dashboard — NIFTY Options Signal Engine</title>
-    <meta name="description" content="Real-time AI-powered trading signals for NIFTY, BANKNIFTY options with OI analysis, Smart Money tracking, and technical confluence scoring.">
+    <title>Trading Dashboard — NIFTY Options Signal Engine</title>
+    <meta name="description" content="Real-time trading signals for NIFTY, BANKNIFTY options with OI analysis, Smart Money tracking, and technical confluence scoring.">
     <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
     <style>
@@ -800,7 +800,13 @@
         </div>
 
         <div class="search-bar">
-            <input type="text" id="symbolInput" placeholder="Symbol — RELIANCE.NS  AAPL  ^NSEI  ^NSEBANK" value="^NSEI">
+            <input type="text" id="symbolInput" list="indexList" placeholder="Select Index or Type Symbol (e.g. ^NSEI, ^NSEBANK)" value="^NSEI">
+            <datalist id="indexList">
+                <option value="^NSEI">NIFTY 50</option>
+                <option value="^NSEBANK">BANK NIFTY</option>
+                <option value="NIFTY_FIN_SERVICE.NS">FIN NIFTY</option>
+                <option value="^BSESN">SENSEX</option>
+            </datalist>
             <button onclick="fetchData()">Scan</button>
         </div>
 
