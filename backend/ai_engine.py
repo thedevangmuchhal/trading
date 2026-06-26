@@ -66,6 +66,146 @@ def calculate_vwap(df):
     p = (df['High'] + df['Low'] + df['Close']) / 3
     return (p * q).cumsum() / q.cumsum()
 
+# ---------------------------------------------------------------
+# NEW: Stochastic RSI
+# ---------------------------------------------------------------
+def calculate_stochastic_rsi(rsi_series, period=14, smooth_k=3, smooth_d=3):
+    """
+    Stochastic RSI = (RSI - RSI_Low) / (RSI_High - RSI_Low)
+    K% = SMA(StochRSI, smooth_k)
+    D% = SMA(K%, smooth_d)
+    Returns (K%, D%) series.
+    """
+    rsi_min = rsi_series.rolling(window=period).min()
+    rsi_max = rsi_series.rolling(window=period).max()
+    stoch_rsi = (rsi_series - rsi_min) / (rsi_max - rsi_min + 1e-10)
+    k_line = stoch_rsi.rolling(window=smooth_k).mean() * 100
+    d_line = k_line.rolling(window=smooth_d).mean()
+    return k_line, d_line
+
+# ---------------------------------------------------------------
+# NEW: Supertrend Indicator (popular for Indian markets)
+# ---------------------------------------------------------------
+def calculate_supertrend(df, period=10, multiplier=3.0):
+    """
+    Supertrend uses ATR bands around HL2 midpoint.
+    Returns a Series: positive value = bullish, negative = bearish.
+    The returned value is the Supertrend line price itself.
+    Also returns direction: 1 = bullish, -1 = bearish.
+    """
+    hl2 = (df['High'] + df['Low']) / 2
+    
+    # True Range and ATR
+    high_low = df['High'] - df['Low']
+    high_close = (df['High'] - df['Close'].shift()).abs()
+    low_close = (df['Low'] - df['Close'].shift()).abs()
+    tr = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+    atr = tr.ewm(span=period, adjust=False).mean()
+    
+    upper_band = hl2 + (multiplier * atr)
+    lower_band = hl2 - (multiplier * atr)
+    
+    supertrend = pd.Series(0.0, index=df.index)
+    direction = pd.Series(1, index=df.index)  # 1 = bullish, -1 = bearish
+    
+    for i in range(1, len(df)):
+        # Adjust bands based on previous values
+        if lower_band.iloc[i] > lower_band.iloc[i-1] or df['Close'].iloc[i-1] < lower_band.iloc[i-1]:
+            pass  # keep current lower band
+        else:
+            lower_band.iloc[i] = lower_band.iloc[i-1]
+            
+        if upper_band.iloc[i] < upper_band.iloc[i-1] or df['Close'].iloc[i-1] > upper_band.iloc[i-1]:
+            pass  # keep current upper band
+        else:
+            upper_band.iloc[i] = upper_band.iloc[i-1]
+        
+        # Determine direction
+        if supertrend.iloc[i-1] == upper_band.iloc[i-1]:
+            if df['Close'].iloc[i] > upper_band.iloc[i]:
+                supertrend.iloc[i] = lower_band.iloc[i]
+                direction.iloc[i] = 1
+            else:
+                supertrend.iloc[i] = upper_band.iloc[i]
+                direction.iloc[i] = -1
+        else:
+            if df['Close'].iloc[i] < lower_band.iloc[i]:
+                supertrend.iloc[i] = upper_band.iloc[i]
+                direction.iloc[i] = -1
+            else:
+                supertrend.iloc[i] = lower_band.iloc[i]
+                direction.iloc[i] = 1
+    
+    return supertrend, direction
+
+# ---------------------------------------------------------------
+# NEW: RSI Divergence Detection
+# ---------------------------------------------------------------
+def detect_rsi_divergence(df, rsi_series, lookback=5):
+    """
+    Compares price slope vs RSI slope over the last `lookback` candles.
+    Bullish divergence: price making lower lows, RSI making higher lows.
+    Bearish divergence: price making higher highs, RSI making lower highs.
+    Returns: 'bullish', 'bearish', or 'none'
+    """
+    if len(df) < lookback + 1 or len(rsi_series) < lookback + 1:
+        return 'none'
+    
+    recent_prices = df['Close'].iloc[-lookback:]
+    recent_rsi = rsi_series.iloc[-lookback:]
+    
+    # Skip if any NaN
+    if recent_prices.isna().any() or recent_rsi.isna().any():
+        return 'none'
+    
+    # Calculate slopes using linear regression approximation (simple: last - first)
+    price_slope = recent_prices.iloc[-1] - recent_prices.iloc[0]
+    rsi_slope = recent_rsi.iloc[-1] - recent_rsi.iloc[0]
+    
+    # Bullish divergence: price falling but RSI rising
+    if price_slope < 0 and rsi_slope > 0:
+        # Confirm with low comparisons
+        price_low_recent = recent_prices.min()
+        price_low_prev = df['Close'].iloc[-(lookback*2):-lookback].min() if len(df) >= lookback * 2 else price_low_recent
+        rsi_at_price_low_recent = recent_rsi.min()
+        rsi_at_price_low_prev = rsi_series.iloc[-(lookback*2):-lookback].min() if len(rsi_series) >= lookback * 2 else rsi_at_price_low_recent
+        
+        if price_low_recent < price_low_prev and rsi_at_price_low_recent > rsi_at_price_low_prev:
+            return 'bullish'
+    
+    # Bearish divergence: price rising but RSI falling
+    elif price_slope > 0 and rsi_slope < 0:
+        price_high_recent = recent_prices.max()
+        price_high_prev = df['Close'].iloc[-(lookback*2):-lookback].max() if len(df) >= lookback * 2 else price_high_recent
+        rsi_at_price_high_recent = recent_rsi.max()
+        rsi_at_price_high_prev = rsi_series.iloc[-(lookback*2):-lookback].max() if len(rsi_series) >= lookback * 2 else rsi_at_price_high_recent
+        
+        if price_high_recent > price_high_prev and rsi_at_price_high_recent < rsi_at_price_high_prev:
+            return 'bearish'
+    
+    return 'none'
+
+# ---------------------------------------------------------------
+# NEW: Volume Surge Detection
+# ---------------------------------------------------------------
+def detect_volume_surge(df, avg_period=20, threshold=2.0):
+    """
+    Returns True if the latest candle's volume exceeds `threshold` x
+    the `avg_period`-period average volume.
+    Also returns the ratio for display.
+    """
+    if len(df) < avg_period + 1 or 'Volume' not in df.columns:
+        return False, 1.0
+    
+    avg_vol = df['Volume'].iloc[-(avg_period+1):-1].mean()
+    if avg_vol <= 0:
+        return False, 1.0
+    
+    current_vol = df['Volume'].iloc[-1]
+    ratio = current_vol / avg_vol
+    return ratio >= threshold, round(ratio, 2)
+
+
 def analyze_technicals(df):
     if df.empty:
         return {}
@@ -90,6 +230,22 @@ def analyze_technicals(df):
     df['MACD_Hist'] = hist
     df['ADX'] = calculate_adx(df, 14)
     df['VWAP'] = calculate_vwap(df)
+
+    # NEW: Stochastic RSI
+    stoch_k, stoch_d = calculate_stochastic_rsi(df['RSI'])
+    df['StochRSI_K'] = stoch_k
+    df['StochRSI_D'] = stoch_d
+
+    # NEW: Supertrend
+    supertrend_line, supertrend_dir = calculate_supertrend(df)
+    df['Supertrend'] = supertrend_line
+    df['Supertrend_Dir'] = supertrend_dir
+
+    # NEW: RSI Divergence
+    rsi_divergence = detect_rsi_divergence(df, df['RSI'])
+
+    # NEW: Volume Surge
+    volume_surge, volume_ratio = detect_volume_surge(df)
 
     # Chart Patterns
     body = (df['Close'] - df['Open']).abs()
@@ -156,6 +312,9 @@ def analyze_technicals(df):
     pivot = (high + low + close) / 3
     r1 = (2 * pivot) - low
     s1 = (2 * pivot) - high
+
+    # Supertrend direction for latest candle
+    supertrend_direction = "Bullish" if latest['Supertrend_Dir'] == 1 else "Bearish"
     
     return {
         "current_price": round(current_price, 2),
@@ -174,7 +333,15 @@ def analyze_technicals(df):
         "adx": round(latest['ADX'], 2) if not pd.isna(latest['ADX']) else 0,
         "vwap": round(latest['VWAP'], 2) if not pd.isna(latest['VWAP']) else None,
         "support": round(s1, 2),
-        "resistance": round(r1, 2)
+        "resistance": round(r1, 2),
+        # NEW fields
+        "stoch_rsi_k": round(latest['StochRSI_K'], 2) if not pd.isna(latest['StochRSI_K']) else 50,
+        "stoch_rsi_d": round(latest['StochRSI_D'], 2) if not pd.isna(latest['StochRSI_D']) else 50,
+        "supertrend": round(latest['Supertrend'], 2) if not pd.isna(latest['Supertrend']) else None,
+        "supertrend_direction": supertrend_direction,
+        "rsi_divergence": rsi_divergence,
+        "volume_surge": volume_surge,
+        "volume_ratio": volume_ratio,
     }
 
 def generate_signals(ticker="^NSEI"):
@@ -184,6 +351,7 @@ def generate_signals(ticker="^NSEI"):
     # 1. Multi-Timeframe (MTF) Data Fetching
     df_15m = fetch_market_data(ticker, interval="15m")
     df_1h = fetch_market_data(ticker, interval="1h")
+    df_4h = fetch_market_data(ticker, interval="1h", period="1mo")  # Approximate 4h via 1mo of 1h data
     
     headlines = fetch_news(ticker)
     sentiment_val = analyze_sentiment(headlines)
@@ -197,7 +365,22 @@ def generate_signals(ticker="^NSEI"):
     
     # Check 1H Macro Trend
     macro_tech = analyze_technicals(df_1h) if not df_1h.empty else tech_data
+
+    # NEW: Check 4H Higher-Timeframe Trend (resample 1h data to approximate 4h)
+    htf_tech = None
+    if not df_4h.empty and len(df_4h) >= 20:
+        try:
+            df_4h_resampled = df_4h.resample('4h').agg({
+                'Open': 'first', 'High': 'max', 'Low': 'min',
+                'Close': 'last', 'Volume': 'sum'
+            }).dropna()
+            if not df_4h_resampled.empty:
+                htf_tech = analyze_technicals(df_4h_resampled)
+        except Exception:
+            htf_tech = None
+
     macro_trend = macro_tech.get('trend', 'Neutral')
+    htf_trend = htf_tech.get('trend', 'Neutral') if htf_tech else 'Neutral'
 
     current_price = tech_data['current_price']
     
@@ -252,8 +435,13 @@ def generate_signals(ticker="^NSEI"):
             
     sentiment_score += (sentiment_val * 0.4) # Scale sentiment (-100 to 100)
     
+    # NEW: IV Crush Warning
+    iv_crush_warning = False
     if vix_data and 'pct_change' in vix_data:
-        if vix_data['pct_change'] < -3.0:
+        if vix_data['pct_change'] < -5.0:
+            iv_crush_warning = True
+            sentiment_score -= 20  # Extra penalty for IV crush
+        elif vix_data['pct_change'] < -3.0:
             sentiment_score -= 15 # VIX Crashing, Option Premium Melting
         elif vix_data['pct_change'] > 3.0:
             sentiment_score += 10 # VIX Rising, Fear increasing
@@ -263,8 +451,13 @@ def generate_signals(ticker="^NSEI"):
     # -----------------------------------------------------
     pcr = None
     vpcr = None
+    atm_ce_ltp = 0
+    atm_pe_ltp = 0
     if oi_metrics:
         pcr = oi_metrics.get('pcr')
+        atm_ce_ltp = oi_metrics.get('atm_ce_ltp', 0)
+        atm_pe_ltp = oi_metrics.get('atm_pe_ltp', 0)
+        
         if pcr is not None:
             if pcr > 1.2: options_score += 25
             elif pcr > 1.0: options_score += 10
@@ -336,11 +529,57 @@ def generate_signals(ticker="^NSEI"):
         elif ml_prob < 0.25: technical_score -= 20
         elif ml_prob < 0.40: technical_score -= 10
 
-    # MTF Confluence Check
-    if tech_data['trend'] == "Bullish" and macro_trend == "Bearish":
-        technical_score -= 20 # Bull Trap
-    elif tech_data['trend'] == "Bearish" and macro_trend == "Bullish":
-        technical_score += 20 # Bear Trap
+    # NEW: Supertrend contribution (replaces weak EMA overlap)
+    if tech_data.get('supertrend_direction') == "Bullish":
+        technical_score += 15
+    elif tech_data.get('supertrend_direction') == "Bearish":
+        technical_score -= 15
+
+    # NEW: RSI Divergence
+    rsi_divergence = tech_data.get('rsi_divergence', 'none')
+    if rsi_divergence == 'bullish':
+        technical_score += 15
+    elif rsi_divergence == 'bearish':
+        technical_score -= 15
+
+    # NEW: Stochastic RSI crossover
+    stoch_k = tech_data.get('stoch_rsi_k', 50)
+    stoch_d = tech_data.get('stoch_rsi_d', 50)
+    if stoch_k < 20 and stoch_k > stoch_d:
+        technical_score += 10  # Oversold crossover (bullish)
+    elif stoch_k > 80 and stoch_k < stoch_d:
+        technical_score -= 10  # Overbought crossover (bearish)
+
+    # NEW: Volume Surge confirmation
+    if tech_data.get('volume_surge', False):
+        # Surge on a bullish candle amplifies, on bearish candle dampens
+        if tech_data['trend'] == "Bullish":
+            technical_score += 10
+        elif tech_data['trend'] == "Bearish":
+            technical_score -= 10
+
+    # ENHANCED MTF Confluence Check (now uses 3 timeframes: 15m, 1h, 4h)
+    trends_15m = tech_data['trend']
+    trends_1h = macro_trend
+    trends_4h = htf_trend
+
+    bullish_count = sum(1 for t in [trends_15m, trends_1h, trends_4h] if t == "Bullish")
+    bearish_count = sum(1 for t in [trends_15m, trends_1h, trends_4h] if t == "Bearish")
+
+    if bullish_count >= 3:
+        technical_score += 25  # Full confluence bonus
+    elif bullish_count == 2:
+        technical_score += 10  # Partial confluence
+    elif bearish_count >= 3:
+        technical_score -= 25  # Full bearish confluence
+    elif bearish_count == 2:
+        technical_score -= 10
+
+    # Trap detection from old MTF logic (still useful)
+    if trends_15m == "Bullish" and trends_1h == "Bearish" and trends_4h == "Bearish":
+        technical_score -= 20  # Bull Trap — lower TF against higher TFs
+    elif trends_15m == "Bearish" and trends_1h == "Bullish" and trends_4h == "Bullish":
+        technical_score += 20  # Bear Trap — pullback in uptrend
         
     market_condition = "Trending"
     if tech_data['adx'] < 20:
@@ -418,6 +657,10 @@ def generate_signals(ticker="^NSEI"):
     else:
         entry = stop_loss = target = 0
 
+    # VIX data for frontend
+    vix_current = vix_data.get('current', 0) if vix_data else 0
+    vix_change = vix_data.get('pct_change', 0) if vix_data else 0
+
     return {
         "timestamp": pd.Timestamp.now().isoformat(),
         "ticker": ticker,
@@ -446,10 +689,25 @@ def generate_signals(ticker="^NSEI"):
         "target": round(target, 2),
         "support": tech_data['support'],
         "resistance": tech_data['resistance'],
-        "recent_headlines": headlines[:3],
+        "recent_headlines": headlines[:5],  # Expanded from 3 to 5
         "event_warning": event_warning,
         "fii_net": fii_net,
-        "dii_net": dii_net
+        "dii_net": dii_net,
+
+        # NEW fields
+        "rsi_divergence": rsi_divergence,
+        "stoch_rsi_k": stoch_k,
+        "stoch_rsi_d": stoch_d,
+        "supertrend": tech_data.get('supertrend'),
+        "supertrend_direction": tech_data.get('supertrend_direction', 'Neutral'),
+        "volume_surge": tech_data.get('volume_surge', False),
+        "volume_ratio": tech_data.get('volume_ratio', 1.0),
+        "iv_crush_warning": iv_crush_warning,
+        "atm_ce_ltp": atm_ce_ltp,
+        "atm_pe_ltp": atm_pe_ltp,
+        "vix": vix_current,
+        "vix_change": round(vix_change, 2),
+        "mtf_confluence": f"{bullish_count}B/{bearish_count}S (15m:{trends_15m} 1h:{trends_1h} 4h:{trends_4h})",
     }
 
 if __name__ == "__main__":
