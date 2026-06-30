@@ -33,6 +33,7 @@ class PaperTradeRequest(BaseModel):
     lot_size: int = 25
     stop_loss: float = 0
     target: float = 0
+    strategy_type: str = "NORMAL"
 
 # ─────────────────────────────────────────────────────────────────────────────
 # SIGNAL HISTORY LOG (#6) — Track signal accuracy over time
@@ -269,6 +270,7 @@ def create_paper_trade(trade: PaperTradeRequest):
         "pnl": 0.0,
         "opened_at": datetime.now().isoformat(),
         "closed_at": None,
+        "strategy_type": trade.strategy_type,
     }
     paper_trades.append(trade_obj)
     return trade_obj

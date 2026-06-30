@@ -119,6 +119,7 @@ def _close_position(signal_data):
         "signal_strength": pos["signal_strength"],
         "mtf": pos["mtf"],
         "reasons": pos.get("reasons", ""),
+        "remark": f"Strategy: {pos.get('strategy_type', 'NORMAL')}",
         "duration_mins": _calc_duration(pos["entry_time"], exit_time),
     }
 
@@ -142,6 +143,7 @@ def _open_position(signal_data):
     confidence = signal_data.get('confidence', 50)
     signal_strength = signal_data.get('signal_strength', 0)
     mtf = signal_data.get('mtf_confluence', '')
+    strategy_type = signal_data.get('strategy_type', 'NORMAL')
     reasons = " | ".join(signal_data.get('signal_reasons', [])[:3])
 
     # Determine option type and strike
@@ -171,6 +173,7 @@ def _open_position(signal_data):
         "confidence": confidence,
         "signal_strength": signal_strength,
         "mtf": mtf,
+        "strategy_type": strategy_type,
         "reasons": reasons,
     }
 
@@ -190,6 +193,7 @@ def _open_position(signal_data):
         "signal_strength": signal_strength,
         "mtf": mtf,
         "reasons": reasons,
+        "remark": f"Strategy: {strategy_type}",
         "duration_mins": "",
     }
 
@@ -325,7 +329,8 @@ def start_logger(sheet_url: str, ticker: str = "^NSEI", lot_size: int = 25):
     _post_to_sheet({
         "type": "START",
         "entry_time": ist_time,
-        "trade": "Logger Started"
+        "trade": "No trade detected",
+        "remark": "Logger Started"
     })
 
     _LOGGER_THREAD = threading.Thread(target=_signal_loop, daemon=True)

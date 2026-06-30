@@ -785,27 +785,44 @@ def generate_signals(ticker="^NSEI"):
     elif confidence <= sell_threshold:
         action = "SELL"; strike_type = "PE"
 
-    # ── Capital Preservation Overrides ────────────────────────────────────
-    # These can FORCE action back to WAIT even after the above logic
+    # ── GOLDEN SNIPER STRATEGY (High Win Rate / Reversal) ─────────────────
+    strategy_type = "NORMAL"
+    in_chop_zone = 660 <= ist_total_mins <= 810
+    has_surge = tech_data.get('volume_surge', False)
+    bb_lower = tech_data.get('bb_lower')
+    bb_upper = tech_data.get('bb_upper')
+    
+    # Sniper BUY (Bounce off lower band + MTF aligned + surge)
+    if not in_chop_zone and has_surge and bb_lower and current_price <= bb_lower * 1.002 and rsi_val < 35 and bullish_count >= 3:
+        if not has_oi or options_score >= 40: # Not heavily bearish options chain
+            action = "BUY"; strike_type = "CE"; confidence = 95
+            strategy_type = "SNIPER"
+            
+    # Sniper SELL
+    elif not in_chop_zone and has_surge and bb_upper and current_price >= bb_upper * 0.998 and rsi_val > 65 and bearish_count >= 3:
+        if not has_oi or options_score <= 60: 
+            action = "SELL"; strike_type = "PE"; confidence = 5
+            strategy_type = "SNIPER"
 
     if action != "WAIT":
-        # Gate 1: Pillar Agreement — at least 3 of 4 must agree
-        if pillar_agreement < 3:
-            action = "WAIT"
-            strike_type = None
+        if strategy_type == "NORMAL":
+            # Gate 1: Pillar Agreement — at least 3 of 4 must agree
+            if pillar_agreement < 3:
+                action = "WAIT"
+                strike_type = None
 
-        # Gate 2: Choppy Market Hard Block (ADX < 15)
-        elif choppy_blocked:
-            action = "WAIT"
-            strike_type = None
+            # Gate 2: Choppy Market Hard Block (ADX < 15)
+            elif choppy_blocked:
+                action = "WAIT"
+                strike_type = None
 
-        # Gate 3: Expiry Day Blocks
-        elif expiry_blocked:
-            action = "WAIT"
-            strike_type = None
+            # Gate 3: Expiry Day Blocks
+            elif expiry_blocked:
+                action = "WAIT"
+                strike_type = None
 
-        # Gate 4: Closing Session Block (15:00-15:30) — no new entries
-        elif ist_total_mins >= 900:
+        # Gate 4: Closing Session Block (15:00-15:30) — applies to ALL strategies
+        if ist_total_mins >= 900:
             action = "WAIT"
             strike_type = None
 
@@ -850,11 +867,17 @@ def generate_signals(ticker="^NSEI"):
         else:
             sp = math.floor(current_price / 100) * 100
         entry = current_price
-        target = (oi_metrics['highest_ce_strike']
-                  if oi_metrics and oi_metrics.get('highest_ce_strike', 0) > entry
-                  else entry + atr * 3.0)
-        hp = oi_metrics.get('highest_pe_strike', 0) if oi_metrics else 0
-        stop_loss = max(hp, entry - atr * 2.0) if hp > 0 and hp < entry else entry - atr * 1.5
+        
+        if strategy_type == "SNIPER":
+            target = entry + atr * 1.5
+            stop_loss = entry - atr * 1.0
+        else:
+            target = (oi_metrics['highest_ce_strike']
+                      if oi_metrics and oi_metrics.get('highest_ce_strike', 0) > entry
+                      else entry + atr * 3.0)
+            hp = oi_metrics.get('highest_pe_strike', 0) if oi_metrics else 0
+            stop_loss = max(hp, entry - atr * 2.0) if hp > 0 and hp < entry else entry - atr * 1.5
+            
     elif action == "SELL":
         if strike_greeks:
             selected_strike, selected_delta, selected_ltp = find_strike_by_delta(strike_greeks, target_delta, "PE")
@@ -862,10 +885,16 @@ def generate_signals(ticker="^NSEI"):
         else:
             sp = math.ceil(current_price / 100) * 100
         entry = current_price
-        hp = oi_metrics.get('highest_pe_strike', 0) if oi_metrics else 0
-        target = hp if hp > 0 and hp < entry else entry - atr * 3.0
-        hc = oi_metrics.get('highest_ce_strike', 0) if oi_metrics else 0
-        stop_loss = min(hc, entry + atr * 2.0) if hc > entry else entry + atr * 1.5
+        
+        if strategy_type == "SNIPER":
+            target = entry - atr * 1.5
+            stop_loss = entry + atr * 1.0
+        else:
+            hp = oi_metrics.get('highest_pe_strike', 0) if oi_metrics else 0
+            target = hp if hp > 0 and hp < entry else entry - atr * 3.0
+            hc = oi_metrics.get('highest_ce_strike', 0) if oi_metrics else 0
+            stop_loss = min(hc, entry + atr * 2.0) if hc > entry else entry + atr * 1.5
+            
     else:
         sp = atm_strike; entry = stop_loss = target = 0
 
@@ -877,6 +906,11 @@ def generate_signals(ticker="^NSEI"):
 
     # ── Signal reasons (human-readable) ───────────────────────────────────
     reasons = []
+    if strategy_type == "SNIPER" and action != "WAIT":
+        reasons.append("🎯 [SNIPER] Golden Sniper Strategy Triggered")
+    elif action != "WAIT":
+        reasons.append("📊 [NORMAL] Standard Trend Following")
+
     if   bullish_count == 5: reasons.append(f"✅ 5/5 TF Bullish — Full Confluence")
     elif bullish_count == 4: reasons.append(f"✅ 4/5 TF Bullish ({t5m}·{t15m}·{t30m}·{t1h}·{t4h})")
     elif bullish_count == 3: reasons.append(f"🟡 3/5 TF Bullish")
@@ -995,6 +1029,7 @@ def generate_signals(ticker="^NSEI"):
         "chart_pattern":  pat,
         "orb_breakout":   tech_data['orb_breakout'],
         "action":         action,
+        "strategy_type":  strategy_type,
         "strike_recommendation": f"{sp} {strike_type}" + (f" Δ{abs(selected_delta):.2f}" if selected_delta else "") if strike_type else "None",
         "selected_option_ltp":   selected_ltp if selected_ltp > 0 else None,
         "entry_level":    round(entry, 2),

@@ -187,9 +187,9 @@ def run_backtest(ticker="^NSEI"):
 
         # Determine action
         action = "WAIT"
-        if confidence >= 70 and agreement >= 2:
+        if confidence >= 65 and agreement >= 2:
             action = "BUY"
-        elif confidence <= 30 and agreement >= 2:
+        elif confidence <= 35 and agreement >= 2:
             action = "SELL"
 
         # ── Signal Strength (conviction filter) ───────────────────────────
@@ -213,8 +213,8 @@ def run_backtest(ticker="^NSEI"):
             trades_today += 1
             pnl = actual_return
 
-            # Trailing SL simulation: if return is negative and exceeds 1.5 ATR%, stop out early
-            max_loss_pct = (1.5 * atr_val / close_price) if close_price > 0 else 0.02
+            # Trailing SL simulation: if return is negative and exceeds 2.5 ATR%, stop out early
+            max_loss_pct = (2.5 * atr_val / close_price) if close_price > 0 else 0.02
             if pnl < -max_loss_pct:
                 pnl = -max_loss_pct  # Capped by trailing SL
 
@@ -242,7 +242,7 @@ def run_backtest(ticker="^NSEI"):
             trades_today += 1
             pnl = -actual_return
 
-            max_loss_pct = (1.5 * atr_val / close_price) if close_price > 0 else 0.02
+            max_loss_pct = (2.5 * atr_val / close_price) if close_price > 0 else 0.02
             if pnl < -max_loss_pct:
                 pnl = -max_loss_pct
 

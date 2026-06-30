@@ -2270,6 +2270,7 @@
                         lot_size: lotSize,
                         stop_loss: data.stop_loss || 0,
                         target: data.target || 0,
+                        strategy_type: data.strategy_type || "NORMAL",
                     })
                 });
                 const trade = await res.json();
@@ -2345,8 +2346,9 @@
                 openBody.innerHTML = openTrades.map(t => {
                     const pnl = ((t.current_price - t.entry_price) * t.lot_size).toFixed(2);
                     const pnlClass = pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                    const stratBadge = t.strategy_type === 'SNIPER' ? '<span style="font-size:0.7em;background:var(--ember);color:var(--ink);padding:2px 4px;border-radius:4px;margin-left:4px;">SNIPER</span>' : '';
                     return `<tr>
-                        <td style="color:${t.option_type === 'CE' ? 'var(--bull)' : 'var(--bear)'}">${t.option_type}</td>
+                        <td style="color:${t.option_type === 'CE' ? 'var(--bull)' : 'var(--bear)'}">${t.option_type}${stratBadge}</td>
                         <td>${t.strike}</td>
                         <td>₹${t.entry_price.toFixed(2)}</td>
                         <td>${t.lot_size}</td>
@@ -2368,8 +2370,9 @@
             } else {
                 closedBody.innerHTML = closedTrades.map(t => {
                     const pnlClass = t.pnl >= 0 ? 'pnl-positive' : 'pnl-negative';
+                    const stratBadge = t.strategy_type === 'SNIPER' ? '<span style="font-size:0.7em;background:var(--ember);color:var(--ink);padding:2px 4px;border-radius:4px;margin-left:4px;">SNIPER</span>' : '';
                     return `<tr>
-                        <td style="color:${t.option_type === 'CE' ? 'var(--bull)' : 'var(--bear)'}">${t.option_type}</td>
+                        <td style="color:${t.option_type === 'CE' ? 'var(--bull)' : 'var(--bear)'}">${t.option_type}${stratBadge}</td>
                         <td>${t.strike}</td>
                         <td>₹${t.entry_price.toFixed(2)}</td>
                         <td>₹${t.current_price.toFixed(2)}</td>
@@ -2440,7 +2443,11 @@
                 const isSell = data.action === 'SELL';
                 const signalBox = document.getElementById('signalBox');
                 signalBox.className = 'signal-box ' + data.action.toLowerCase();
-                document.getElementById('actionText').innerText = data.action;
+                let actionDisplay = data.action;
+                if (data.strategy_type === 'SNIPER' && data.action !== 'WAIT') {
+                    actionDisplay += ' 🎯 [SNIPER]';
+                }
+                document.getElementById('actionText').innerText = actionDisplay;
 
                 const strikeElem = document.getElementById('strikeText');
                 if (data.action === 'WAIT') {
