@@ -2297,6 +2297,29 @@
             }
         }
 
+        async function updateOpenPaperTrades(ceLtp, peLtp) {
+            try {
+                // Find open trades
+                const openTrades = paperTrades.filter(t => t.status === 'OPEN');
+                if (openTrades.length > 0) {
+                    const updatePromises = openTrades.map(trade => {
+                        const currentPrice = trade.option_type === 'CE' ? ceLtp : peLtp;
+                        if (currentPrice > 0) {
+                            return fetch(`${API_BASE}/api/paper-trade/${trade.id}/update?current_price=${currentPrice}`, {
+                                method: 'POST'
+                            });
+                        }
+                        return Promise.resolve();
+                    });
+                    await Promise.all(updatePromises);
+                }
+                // Refresh list after updates
+                await refreshPaperTrades();
+            } catch (e) {
+                console.error('Update trades error:', e);
+            }
+        }
+
         async function refreshPaperTrades() {
             try {
                 const res = await fetch(`${API_BASE}/api/paper-trades`);
@@ -2701,7 +2724,7 @@
                 document.getElementById('content').style.display = 'block';
 
                 // ── Refresh paper trades ──
-                refreshPaperTrades();
+                updateOpenPaperTrades(ceLtp, peLtp);
 
                 // ── Notifications ──
                 if (data.action !== "WAIT" && data.action !== lastAction) {

@@ -320,6 +320,14 @@ def start_logger(sheet_url: str, ticker: str = "^NSEI", lot_size: int = 25):
     if _LOGGER_THREAD and _LOGGER_THREAD.is_alive():
         return {"status": "already_running"}
 
+    # Send a "START" heartbeat so the sheet is created immediately
+    ist_time = _ist_now().strftime("%H:%M:%S")
+    _post_to_sheet({
+        "type": "START",
+        "entry_time": ist_time,
+        "trade": "Logger Started"
+    })
+
     _LOGGER_THREAD = threading.Thread(target=_signal_loop, daemon=True)
     _LOGGER_THREAD.start()
     return {"status": "started", "sheet_url": sheet_url, "ticker": ticker}
