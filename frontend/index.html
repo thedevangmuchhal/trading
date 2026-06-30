@@ -1698,8 +1698,12 @@
                 </div>
                 <div class="card logger-panel">
                     <div class="logger-url-row">
-                        <input type="text" class="logger-url-input" id="loggerSheetUrl"
-                               placeholder="Paste your Google Apps Script Web App URL here…">
+                        <input type="password" class="logger-url-input" id="loggerSheetUrl"
+                               placeholder="Paste your Google Apps Script Web App URL here…"
+                               autocomplete="off">
+                        <button class="logger-btn" style="background:transparent;border:1px solid var(--glass-border);min-width:36px;padding:0 8px;font-size:1rem;cursor:pointer"
+                                onclick="const el=document.getElementById('loggerSheetUrl');el.type=el.type==='password'?'text':'password';this.textContent=el.type==='password'?'👁':'🙈'"
+                                title="Show/Hide URL">👁</button>
                         <button class="logger-btn start" id="loggerStartBtn" onclick="toggleLogger()">▶ Start</button>
                     </div>
                     <div class="logger-status-grid">
