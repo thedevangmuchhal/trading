@@ -633,7 +633,8 @@ def generate_signals(ticker="^NSEI"):
     elif rsi_val > 75 and stoch_k > 90 and bearish_count >= 3: technical_score -= 20
 
     market_condition = "Trending"
-    if tech_data['adx'] < 20:
+    adx_val = tech_data['adx']
+    if adx_val < 20:
         technical_score  -= 30
         market_condition = "Choppy/Sideways"
 
@@ -643,14 +644,129 @@ def generate_signals(ticker="^NSEI"):
     technical_score   = int(max(0, min(100, technical_score)))
     sentiment_score   = int(max(0, min(100, sentiment_score)))
 
+    # ══════════════════════════════════════════════════════════════════════
+    # IMPROVEMENT #1: ADAPTIVE PILLAR WEIGHTS
+    # ══════════════════════════════════════════════════════════════════════
     has_oi = oi_metrics is not None and oi_metrics.get('pcr') is not None
-    if has_oi:
-        confidence = int((smart_money_score + options_score + technical_score + sentiment_score) / 4)
-    else:
-        confidence = int(smart_money_score * 0.30 + technical_score * 0.45 + sentiment_score * 0.25)
+    dte = oi_metrics.get('days_to_expiry', 5) if oi_metrics else 5
+    is_expiry_day = dte <= 1
 
-    # ── Action logic ──────────────────────────────────────────────────────
+    if not has_oi:
+        # No OI data — rely on technicals + smart money
+        w_tech, w_opt, w_sm, w_sent = 0.45, 0.0, 0.30, 0.25
+    elif is_expiry_day:
+        # Expiry day — options flow dominates (gamma/theta effects)
+        w_tech, w_opt, w_sm, w_sent = 0.20, 0.45, 0.20, 0.15
+    elif adx_val >= 25:
+        # Trending market — technicals dominate
+        w_tech, w_opt, w_sm, w_sent = 0.40, 0.25, 0.25, 0.10
+    elif adx_val < 20:
+        # Choppy market — options flow + smart money more reliable
+        w_tech, w_opt, w_sm, w_sent = 0.20, 0.35, 0.30, 0.15
+    else:
+        # Normal market (ADX 20-25)
+        w_tech, w_opt, w_sm, w_sent = 0.30, 0.28, 0.27, 0.15
+
+    # ══════════════════════════════════════════════════════════════════════
+    # IMPROVEMENT #5: TIME-OF-DAY BIAS
+    # ══════════════════════════════════════════════════════════════════════
+    from datetime import datetime, timedelta
+    try:
+        utc_now = datetime.utcnow()
+        ist_now = utc_now + timedelta(hours=5, minutes=30)
+        ist_hour = ist_now.hour
+        ist_min = ist_now.minute
+        ist_total_mins = ist_hour * 60 + ist_min
+    except:
+        ist_total_mins = 720  # Noon default
+
+    time_of_day_penalty = 0
+    orb_suppressed = False
+
+    if 555 <= ist_total_mins < 585:
+        # 9:15-9:45 IST — Opening noise, unreliable signals
+        time_of_day_penalty = -15
+        orb_suppressed = True  # ORB signal is noise in first 30 min
+    elif 900 <= ist_total_mins <= 930:
+        # 15:00-15:30 IST — Closing session, no new entries
+        time_of_day_penalty = -20
+    elif 840 <= ist_total_mins < 900:
+        # 14:00-15:00 IST — Institutional hour, boost smart money
+        w_sm = min(1.0, w_sm + 0.10)
+        # Re-normalize weights
+        w_total = w_tech + w_opt + w_sm + w_sent
+        w_tech /= w_total; w_opt /= w_total; w_sm /= w_total; w_sent /= w_total
+
+    # Suppress ORB contribution if in opening noise window
+    if orb_suppressed and tech_data['orb_breakout'] != "None":
+        # Undo the ORB score that was already added (±30)
+        if tech_data['orb_breakout'] == "Bullish":
+            technical_score -= 30
+        elif tech_data['orb_breakout'] == "Bearish":
+            technical_score += 30
+        technical_score = int(max(0, min(100, technical_score)))
+
+    # Compute weighted confidence
+    confidence = int(
+        technical_score * w_tech +
+        options_score * w_opt +
+        smart_money_score * w_sm +
+        sentiment_score * w_sent
+    )
+
+    # Apply time-of-day penalty
+    confidence = int(max(0, min(100, confidence + time_of_day_penalty)))
+
+    # ══════════════════════════════════════════════════════════════════════
+    # IMPROVEMENT #2: EXPIRY DAY SPECIAL LOGIC
+    # ══════════════════════════════════════════════════════════════════════
+    expiry_blocked = False
+    if is_expiry_day and has_oi:
+        max_pain = oi_metrics.get('max_pain', 0)
+        # Gamma pin: if price is within 0.5% of Max Pain → strong WAIT bias
+        if max_pain and abs(current_price - max_pain) / max_pain < 0.005:
+            confidence = max(35, min(65, confidence))  # Clamp to WAIT zone
+            expiry_blocked = True
+
+        # Theta decay penalty after 1:30 PM
+        if ist_total_mins >= 810:  # 13:30 IST
+            confidence = int(confidence * 0.90)  # 10% penalty
+
+        # Volume confirmation required on expiry
+        if not tech_data.get('volume_surge', False):
+            confidence = max(35, min(65, confidence))
+            expiry_blocked = True
+
+    # ══════════════════════════════════════════════════════════════════════
+    # IMPROVEMENT #3: CAPITAL PRESERVATION RULES
+    # ══════════════════════════════════════════════════════════════════════
+
+    # --- Pillar Agreement Gate ---
+    # Count how many pillars agree on direction
+    bullish_pillars = sum([
+        smart_money_score > 60,
+        options_score > 60 if has_oi else True,  # Skip if no OI
+        technical_score > 60,
+        sentiment_score > 55,
+    ])
+    bearish_pillars = sum([
+        smart_money_score < 40,
+        options_score < 40 if has_oi else True,
+        technical_score < 40,
+        sentiment_score < 45,
+    ])
+
+    pillar_agreement = max(bullish_pillars, bearish_pillars)
+
+    # --- Choppy Market Hard Block ---
+    choppy_blocked = adx_val < 15  # No trend at all → no trade
+
+    # ── Action logic (with preservation gates) ────────────────────────────
     action = "WAIT"; strike_type = None
+
+    # Dynamic thresholds based on context
+    buy_threshold = 80 if is_expiry_day else 70
+    sell_threshold = 20 if is_expiry_day else 30
 
     if smart_money_score >= 80 and (options_score >= 60 or not has_oi):
         action = "BUY"; strike_type = "CE"; confidence = max(confidence, 80)
@@ -664,10 +780,34 @@ def generate_signals(ticker="^NSEI"):
         action = "BUY"; strike_type = "CE"; confidence = max(confidence, 65)
     elif rsi_val > 65 and stoch_k > 80 and bearish_count >= 3 and smart_money_score <= 40:
         action = "SELL"; strike_type = "PE"; confidence = min(confidence, 35)
-    elif confidence >= 70:
+    elif confidence >= buy_threshold:
         action = "BUY"; strike_type = "CE"
-    elif confidence <= 30:
+    elif confidence <= sell_threshold:
         action = "SELL"; strike_type = "PE"
+
+    # ── Capital Preservation Overrides ────────────────────────────────────
+    # These can FORCE action back to WAIT even after the above logic
+
+    if action != "WAIT":
+        # Gate 1: Pillar Agreement — at least 3 of 4 must agree
+        if pillar_agreement < 3:
+            action = "WAIT"
+            strike_type = None
+
+        # Gate 2: Choppy Market Hard Block (ADX < 15)
+        elif choppy_blocked:
+            action = "WAIT"
+            strike_type = None
+
+        # Gate 3: Expiry Day Blocks
+        elif expiry_blocked:
+            action = "WAIT"
+            strike_type = None
+
+        # Gate 4: Closing Session Block (15:00-15:30) — no new entries
+        elif ist_total_mins >= 900:
+            action = "WAIT"
+            strike_type = None
 
     # ── Entry / Target / SL ───────────────────────────────────────────────
     atr = tech_data['atr']
@@ -779,6 +919,30 @@ def generate_signals(ticker="^NSEI"):
     elif tech_data.get('vwap_cross') == 'Below' and tech_data['trend'] == 'Bearish': signal_strength = min(10, signal_strength + 1)
     if pdh and current_price > pdh: signal_strength = min(10, signal_strength + 1)
     if pdl and current_price < pdl: signal_strength = min(10, signal_strength + 1)
+
+    # ── Capital Preservation Reasons ──────────────────────────────────────
+    if choppy_blocked: reasons.append("🛑 ADX < 15 — no trend, trades blocked")
+    elif market_condition == "Choppy/Sideways": reasons.append("⚠️ ADX < 20 — choppy market, reduced weight")
+    if is_expiry_day: reasons.append(f"📅 Expiry day (DTE={dte}) — tighter thresholds")
+    if expiry_blocked: reasons.append("🎯 Near Max Pain / low volume — gamma pin risk")
+    if orb_suppressed: reasons.append("⏰ 9:15-9:45 — ORB suppressed (opening noise)")
+    if ist_total_mins >= 900 and action == "WAIT": reasons.append("🔒 15:00-15:30 — closing session, no new entries")
+    if pillar_agreement < 3 and action == "WAIT":
+        reasons.append(f"⚖️ Only {pillar_agreement}/4 pillars agree — need 3+ for trade")
+    if 840 <= ist_total_mins < 900: reasons.append("🏦 14:00-15:00 — institutional hour, Smart Money boosted")
+    # Weight regime indicator
+    if adx_val >= 25: reasons.append(f"📊 Trending regime (ADX {adx_val:.0f}) — Tech weighted 40%")
+    elif adx_val < 20: reasons.append(f"📊 Choppy regime (ADX {adx_val:.0f}) — Options weighted 35%")
+    if not reasons: reasons.append("⏳ No strong confluence — waiting for a clean setup")
+
+    # ── Conviction Filter (Gate 5) ────────────────────────────────────────
+    # If signal strength is too low, force WAIT even if confidence threshold passed
+    if action != "WAIT" and signal_strength < 4:
+        action = "WAIT"
+        strike_type = None
+        reasons.append("🛡️ Conviction too low (strength < 4) — trade blocked")
+        # Reset entry/target/SL to 0
+        sp = atm_strike; entry = stop_loss = target = 0
 
     # Expected move range (ATR-based intraday range)
     expected_move_high = round(current_price + atr * 1.5, 2)

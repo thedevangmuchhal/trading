@@ -35,8 +35,70 @@ class PaperTradeRequest(BaseModel):
     target: float = 0
 
 # ─────────────────────────────────────────────────────────────────────────────
+# SIGNAL HISTORY LOG (#6) — Track signal accuracy over time
+# ─────────────────────────────────────────────────────────────────────────────
+signal_history: list[dict] = []
+MAX_SIGNAL_HISTORY = 50
+
+def _evaluate_past_signals(current_price: float):
+    """Evaluate if past signals were correct based on price movement."""
+    for sig in signal_history:
+        if sig.get("was_correct") is not None:
+            continue  # Already evaluated
+        if sig.get("action") == "WAIT":
+            # WAIT is correct if price moved < 0.3% (stayed flat)
+            if sig.get("price_at_signal") and current_price:
+                pct_move = abs(current_price - sig["price_at_signal"]) / sig["price_at_signal"] * 100
+                sig["price_after"] = current_price
+                sig["was_correct"] = pct_move < 0.3
+        elif sig.get("action") == "BUY":
+            sig["price_after"] = current_price
+            sig["was_correct"] = current_price > sig.get("price_at_signal", 0)
+        elif sig.get("action") == "SELL":
+            sig["price_after"] = current_price
+            sig["was_correct"] = current_price < sig.get("price_at_signal", 0)
+
+# ─────────────────────────────────────────────────────────────────────────────
+# RENDER FREE TIER KEEPALIVE — self-ping during market hours
+# ─────────────────────────────────────────────────────────────────────────────
+import threading, time, os, requests as _requests
+
+def _keepalive_loop():
+    """Ping own server every 4 minutes during market hours to prevent Render sleep."""
+    render_url = os.environ.get("RENDER_EXTERNAL_URL", "")
+    if not render_url:
+        print("[Keepalive] No RENDER_EXTERNAL_URL set. Self-ping disabled.")
+        return
+
+    health_url = f"{render_url}/health"
+    print(f"[Keepalive] 🏓 Started. Will ping {health_url} during market hours.")
+
+    while True:
+        try:
+            from datetime import timedelta
+            utc_now = datetime.utcnow()
+            ist_now = utc_now + timedelta(hours=5, minutes=30)
+            h, m, day = ist_now.hour, ist_now.minute, ist_now.isoweekday()
+            total_mins = h * 60 + m
+
+            # Ping during 9:00 - 15:45 IST on weekdays
+            if day <= 5 and 540 <= total_mins <= 945:
+                _requests.get(health_url, timeout=10)
+        except Exception:
+            pass
+        time.sleep(240)  # Every 4 minutes
+
+# Start keepalive on app boot
+_keepalive_thread = threading.Thread(target=_keepalive_loop, daemon=True)
+_keepalive_thread.start()
+
+# ─────────────────────────────────────────────────────────────────────────────
 # ROUTES
 # ─────────────────────────────────────────────────────────────────────────────
+
+@app.get("/health")
+def health():
+    return {"status": "alive", "time": datetime.now().isoformat()}
 
 @app.get("/")
 def root():
@@ -46,9 +108,55 @@ def root():
 def get_signal(ticker: str = "^NSEI"):
     """
     Returns the latest AI-generated trading signal and market data.
+    Also tracks signal history for accuracy measurement.
     """
     data = generate_signals(ticker)
+
+    # Evaluate past signals with current price
+    current_price = data.get("current_price", 0)
+    if current_price > 0:
+        _evaluate_past_signals(current_price)
+
+    # Record this signal
+    entry = {
+        "timestamp": data.get("timestamp", ""),
+        "action": data.get("action", "WAIT"),
+        "confidence": data.get("confidence_score", 50),
+        "price_at_signal": current_price,
+        "price_after": None,
+        "was_correct": None,
+        "signal_strength": data.get("signal_strength", 0),
+    }
+    signal_history.append(entry)
+    if len(signal_history) > MAX_SIGNAL_HISTORY:
+        signal_history.pop(0)
+
+    # Compute accuracy stats
+    evaluated = [s for s in signal_history if s.get("was_correct") is not None]
+    correct = sum(1 for s in evaluated if s["was_correct"])
+    total = len(evaluated)
+    accuracy = round(correct / total * 100, 1) if total > 0 else 0
+
+    data["signal_history_accuracy"] = {
+        "correct": correct,
+        "total": total,
+        "accuracy_pct": accuracy,
+        "label": f"{correct}/{total} correct ({accuracy}%)" if total > 0 else "Collecting data…",
+    }
+
     return data
+
+@app.get("/api/signal-history")
+def get_signal_history():
+    """Return the signal history log with accuracy stats."""
+    evaluated = [s for s in signal_history if s.get("was_correct") is not None]
+    correct = sum(1 for s in evaluated if s["was_correct"])
+    total = len(evaluated)
+    accuracy = round(correct / total * 100, 1) if total > 0 else 0
+    return {
+        "history": signal_history[-20:],
+        "accuracy": {"correct": correct, "total": total, "accuracy_pct": accuracy},
+    }
 
 @app.get("/api/candles")
 def get_candles(ticker: str = "^NSEI", interval: str = "15m"):
@@ -118,12 +226,31 @@ def get_oi(ticker: str = "^NSEI"):
         return {"oi_data": [], "pcr": None, "error": str(e)}
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PAPER TRADING ENDPOINTS
+# PAPER TRADING with Trailing SL + Capital Preservation (#4, #3)
 # ─────────────────────────────────────────────────────────────────────────────
+MAX_DAILY_LOSS = 5000  # ₹ configurable
+MAX_OPEN_POSITIONS = 2
+
+def _get_daily_pnl():
+    """Sum P&L of trades closed today."""
+    today = datetime.now().date().isoformat()
+    return sum(
+        t["pnl"] for t in paper_trades
+        if t["status"] == "CLOSED" and t.get("closed_at", "").startswith(today)
+    )
 
 @app.post("/api/paper-trade")
 def create_paper_trade(trade: PaperTradeRequest):
-    """Execute a paper trade with real option prices."""
+    """Execute a paper trade with real option prices + capital preservation."""
+    # Gate: Max daily loss
+    if _get_daily_pnl() <= -MAX_DAILY_LOSS:
+        raise HTTPException(status_code=403, detail=f"Daily loss limit (₹{MAX_DAILY_LOSS}) reached. No new trades today.")
+
+    # Gate: Max open positions
+    open_count = sum(1 for t in paper_trades if t["status"] == "OPEN")
+    if open_count >= MAX_OPEN_POSITIONS:
+        raise HTTPException(status_code=403, detail=f"Max {MAX_OPEN_POSITIONS} open positions allowed.")
+
     trade_obj = {
         "id": str(uuid.uuid4())[:8],
         "ticker": trade.ticker,
@@ -134,7 +261,10 @@ def create_paper_trade(trade: PaperTradeRequest):
         "current_price": trade.entry_price,
         "lot_size": trade.lot_size,
         "stop_loss": trade.stop_loss,
+        "initial_sl": trade.stop_loss,       # Original SL (never moves up)
+        "trailing_sl": trade.stop_loss,       # Trailing SL (moves up)
         "target": trade.target,
+        "peak_price": trade.entry_price,      # Highest price seen
         "status": "OPEN",
         "pnl": 0.0,
         "opened_at": datetime.now().isoformat(),
@@ -145,8 +275,54 @@ def create_paper_trade(trade: PaperTradeRequest):
 
 @app.get("/api/paper-trades")
 def get_paper_trades():
-    """Return all paper trades (open + closed)."""
-    return {"trades": paper_trades}
+    """Return all paper trades (open + closed) + daily P&L."""
+    return {
+        "trades": paper_trades,
+        "daily_pnl": round(_get_daily_pnl(), 2),
+        "daily_loss_limit": MAX_DAILY_LOSS,
+        "daily_limit_hit": _get_daily_pnl() <= -MAX_DAILY_LOSS,
+    }
+
+@app.post("/api/paper-trade/{trade_id}/update")
+def update_paper_trade(trade_id: str, current_price: float = 0):
+    """Update current price and apply trailing SL logic."""
+    for trade in paper_trades:
+        if trade["id"] == trade_id and trade["status"] == "OPEN":
+            if current_price <= 0:
+                return trade
+
+            trade["current_price"] = current_price
+            entry = trade["entry_price"]
+            diff = current_price - entry
+            trade["pnl"] = round(diff * trade["lot_size"], 2)
+
+            # Track peak price
+            if current_price > trade["peak_price"]:
+                trade["peak_price"] = current_price
+
+            # ── Trailing SL Logic ─────────────────────────────────
+            # Estimate ATR as 1% of entry for paper trading
+            atr_estimate = entry * 0.01
+
+            profit = current_price - entry
+            if profit > 2 * atr_estimate:
+                # Trail SL at entry + 1×ATR
+                new_sl = entry + atr_estimate
+                trade["trailing_sl"] = max(trade["trailing_sl"], new_sl)
+            elif profit > 1 * atr_estimate:
+                # Move SL to breakeven
+                trade["trailing_sl"] = max(trade["trailing_sl"], entry)
+
+            # ── Auto-close if trailing SL hit ─────────────────────
+            if current_price <= trade["trailing_sl"]:
+                trade["status"] = "CLOSED"
+                trade["closed_at"] = datetime.now().isoformat()
+                trade["current_price"] = trade["trailing_sl"]
+                diff = trade["trailing_sl"] - entry
+                trade["pnl"] = round(diff * trade["lot_size"], 2)
+
+            return trade
+    raise HTTPException(status_code=404, detail="Trade not found or already closed")
 
 @app.post("/api/paper-trade/{trade_id}/close")
 def close_paper_trade(trade_id: str, close_price: float = 0):
@@ -174,6 +350,41 @@ def get_backtest(ticker: str = "^NSEI"):
     result = run_backtest(ticker)
     return result
 
+# ─────────────────────────────────────────────────────────────────────────────
+# SIGNAL LOGGER ENDPOINTS
+# ─────────────────────────────────────────────────────────────────────────────
+
+class LoggerConfig(BaseModel):
+    sheet_url: str
+    ticker: str = "^NSEI"
+    lot_size: int = 25
+
+@app.post("/api/logger/start")
+def start_signal_logger(config: LoggerConfig):
+    """Start the background signal logger. Requires Google Apps Script web app URL."""
+    from signal_logger import start_logger
+    result = start_logger(config.sheet_url, config.ticker, config.lot_size)
+    return result
+
+@app.post("/api/logger/stop")
+def stop_signal_logger():
+    """Stop the background signal logger."""
+    from signal_logger import stop_logger
+    return stop_logger()
+
+@app.get("/api/logger/status")
+def get_logger_status():
+    """Get current logger status (running, position, daily P&L)."""
+    from signal_logger import get_logger_status
+    return get_logger_status()
+
+@app.get("/api/logger/log")
+def get_logger_log():
+    """Get today's full signal log."""
+    from signal_logger import get_today_log
+    return {"log": get_today_log()}
+
 @app.get("/api/health")
 def health_check():
     return {"status": "ok"}
+

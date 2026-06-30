@@ -991,6 +991,98 @@
         }
 
         /* ═══════════════════════════════════════════
+           SIGNAL LOGGER PANEL
+           ═══════════════════════════════════════════ */
+        .logger-panel {
+            margin-bottom: 1rem;
+        }
+        .logger-url-row {
+            display: flex;
+            gap: 0.4rem;
+            margin-bottom: 0.6rem;
+        }
+        .logger-url-input {
+            flex: 1;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 6px;
+            padding: 0.4rem 0.6rem;
+            color: var(--text-primary);
+            font-size: 0.65rem;
+            font-family: 'DM Mono', monospace;
+            outline: none;
+        }
+        .logger-url-input::placeholder { color: var(--fog); opacity: 0.5; }
+        .logger-url-input:focus { border-color: var(--accent); }
+        .logger-btn {
+            padding: 0.4rem 0.8rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.65rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .logger-btn.start {
+            background: linear-gradient(135deg, #059669, #10B981);
+            color: white;
+        }
+        .logger-btn.stop {
+            background: linear-gradient(135deg, #DC2626, #EF4444);
+            color: white;
+        }
+        .logger-btn:hover { transform: translateY(-1px); }
+        .logger-status-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 0.4rem;
+        }
+        .logger-stat {
+            text-align: center;
+            padding: 0.4rem 0.2rem;
+            background: rgba(255,255,255,0.02);
+            border-radius: 6px;
+            border: 1px solid var(--glass-border);
+        }
+        .logger-stat-label {
+            font-size: 0.45rem;
+            color: var(--fog);
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+        }
+        .logger-stat-val {
+            font-family: 'DM Mono', monospace;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .logger-running-dot {
+            display: inline-block;
+            width: 8px; height: 8px;
+            border-radius: 50%;
+            margin-right: 4px;
+            vertical-align: middle;
+        }
+        .logger-running-dot.active {
+            background: #10B981;
+            animation: pulse-dot 1.5s infinite;
+        }
+        .logger-running-dot.inactive {
+            background: #6B7280;
+        }
+        @keyframes pulse-dot {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(16,185,129,0.4); }
+            50% { opacity: 0.8; box-shadow: 0 0 0 4px rgba(16,185,129,0); }
+        }
+        .logger-position-bar {
+            margin-top: 0.5rem;
+            padding: 0.4rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.65rem;
+            font-family: 'DM Mono', monospace;
+            border: 1px solid var(--glass-border);
+        }
+
+        /* ═══════════════════════════════════════════
            NEWS FEED
            ═══════════════════════════════════════════ */
         .news-feed { margin-bottom: 1rem; }
@@ -1596,6 +1688,42 @@
             <div class="card news-feed" style="margin-bottom: 1rem;">
                 <div class="card-title">Market Headlines</div>
                 <div id="newsItems"></div>
+            </div>
+
+            <!-- ═══════ SIGNAL LOGGER ═══════ -->
+            <div class="stat-section">
+                <div class="stat-section-title">
+                    <span class="logger-running-dot inactive" id="loggerDot"></span>
+                    Signal Logger → Google Sheets
+                </div>
+                <div class="card logger-panel">
+                    <div class="logger-url-row">
+                        <input type="text" class="logger-url-input" id="loggerSheetUrl"
+                               placeholder="Paste your Google Apps Script Web App URL here…">
+                        <button class="logger-btn start" id="loggerStartBtn" onclick="toggleLogger()">▶ Start</button>
+                    </div>
+                    <div class="logger-status-grid">
+                        <div class="logger-stat">
+                            <div class="logger-stat-label">Status</div>
+                            <div class="logger-stat-val" id="loggerStatus" style="color:var(--fog)">Stopped</div>
+                        </div>
+                        <div class="logger-stat">
+                            <div class="logger-stat-label">Trades</div>
+                            <div class="logger-stat-val" id="loggerTrades" style="color:var(--fog)">0</div>
+                        </div>
+                        <div class="logger-stat">
+                            <div class="logger-stat-label">Day P&L</div>
+                            <div class="logger-stat-val" id="loggerPnl" style="color:var(--fog)">₹0</div>
+                        </div>
+                        <div class="logger-stat">
+                            <div class="logger-stat-label">Signal</div>
+                            <div class="logger-stat-val" id="loggerSignal" style="color:var(--fog)">--</div>
+                        </div>
+                    </div>
+                    <div class="logger-position-bar" id="loggerPositionBar" style="display:none; background:rgba(16,185,129,0.08);">
+                        <span id="loggerPositionText">No open position</span>
+                    </div>
+                </div>
             </div>
 
         </div><!-- /content -->
@@ -2342,6 +2470,21 @@
                 // ── Signal Reasons ──
                 renderSignalReasons(data.signal_reasons);
 
+                // ── Signal Accuracy (#6) ──
+                if (data.signal_history_accuracy) {
+                    const acc = data.signal_history_accuracy;
+                    const reasonsList = document.getElementById('signalReasonsList');
+                    if (reasonsList && acc.total > 0) {
+                        const li = document.createElement('li');
+                        li.style.borderTop = '1px solid var(--glass-border)';
+                        li.style.paddingTop = '0.4rem';
+                        li.style.marginTop = '0.3rem';
+                        const color = acc.accuracy_pct >= 55 ? 'var(--bull)' : acc.accuracy_pct < 45 ? 'var(--bear)' : 'var(--ember)';
+                        li.innerHTML = `<span style="color:${color}; font-weight:600">📈 Signal Accuracy: ${acc.label}</span>`;
+                        reasonsList.appendChild(li);
+                    }
+                }
+
                 // ── Fibonacci ──
                 renderFibTable(data.fibonacci);
 
@@ -2612,6 +2755,112 @@
             }
         }
 
+        // ═══════════════════════════════════════════
+        // SIGNAL LOGGER CONTROL
+        // ═══════════════════════════════════════════
+        let loggerRunning = false;
+        let loggerPollInterval = null;
+
+        async function toggleLogger() {
+            const btn = document.getElementById('loggerStartBtn');
+            if (loggerRunning) {
+                // Stop
+                try {
+                    await fetch(`${API_BASE}/api/logger/stop`, { method: 'POST' });
+                } catch(e) {}
+                loggerRunning = false;
+                btn.textContent = '▶ Start';
+                btn.className = 'logger-btn start';
+                if (loggerPollInterval) { clearInterval(loggerPollInterval); loggerPollInterval = null; }
+                updateLoggerUI({ running: false, last_action: '--', daily_pnl: 0, trade_count: 0, current_position: null });
+            } else {
+                // Start
+                const sheetUrl = document.getElementById('loggerSheetUrl').value.trim();
+                if (!sheetUrl) {
+                    alert('Please paste your Google Apps Script Web App URL first!\n\nSee the setup instructions below the dashboard.');
+                    return;
+                }
+                try {
+                    const res = await fetch(`${API_BASE}/api/logger/start`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ sheet_url: sheetUrl, ticker: currentTicker, lot_size: 25 })
+                    });
+                    const data = await res.json();
+                    if (data.status === 'started' || data.status === 'already_running') {
+                        loggerRunning = true;
+                        btn.textContent = '■ Stop';
+                        btn.className = 'logger-btn stop';
+                        // Save URL to localStorage
+                        localStorage.setItem('logger_sheet_url', sheetUrl);
+                        // Start polling status
+                        pollLoggerStatus();
+                        loggerPollInterval = setInterval(pollLoggerStatus, 10000);
+                    }
+                } catch(e) {
+                    alert('Failed to start logger. Is the backend running?');
+                }
+            }
+        }
+
+        async function pollLoggerStatus() {
+            try {
+                const res = await fetch(`${API_BASE}/api/logger/status`);
+                const data = await res.json();
+                updateLoggerUI(data);
+                if (!data.running && loggerRunning) {
+                    // Logger stopped externally
+                    loggerRunning = false;
+                    const btn = document.getElementById('loggerStartBtn');
+                    btn.textContent = '▶ Start';
+                    btn.className = 'logger-btn start';
+                    if (loggerPollInterval) { clearInterval(loggerPollInterval); loggerPollInterval = null; }
+                }
+            } catch(e) {}
+        }
+
+        function updateLoggerUI(data) {
+            const dot = document.getElementById('loggerDot');
+            const statusEl = document.getElementById('loggerStatus');
+            const tradesEl = document.getElementById('loggerTrades');
+            const pnlEl = document.getElementById('loggerPnl');
+            const signalEl = document.getElementById('loggerSignal');
+            const posBar = document.getElementById('loggerPositionBar');
+            const posText = document.getElementById('loggerPositionText');
+
+            if (data.running) {
+                dot.className = 'logger-running-dot active';
+                statusEl.textContent = 'Running';
+                statusEl.style.color = 'var(--bull)';
+            } else {
+                dot.className = 'logger-running-dot inactive';
+                statusEl.textContent = 'Stopped';
+                statusEl.style.color = 'var(--fog)';
+            }
+
+            tradesEl.textContent = data.trade_count || 0;
+            tradesEl.style.color = 'var(--text-primary)';
+
+            const pnl = data.daily_pnl || 0;
+            pnlEl.textContent = (pnl >= 0 ? '+' : '') + '₹' + pnl.toLocaleString('en-IN');
+            pnlEl.style.color = pnl >= 0 ? 'var(--bull)' : 'var(--bear)';
+
+            const sig = data.last_action || '--';
+            signalEl.textContent = sig;
+            signalEl.style.color = sig === 'BUY' ? 'var(--bull)' : sig === 'SELL' ? 'var(--bear)' : 'var(--ember)';
+
+            if (data.current_position && data.current_position.trade) {
+                posBar.style.display = 'block';
+                const cp = data.current_position;
+                const isBuy = cp.trade.includes('CE');
+                posBar.style.background = isBuy ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)';
+                posBar.style.borderColor = isBuy ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)';
+                posText.innerHTML = `<span style="color:${isBuy?'var(--bull)':'var(--bear)'}">${isBuy?'▲ LONG':'▼ SHORT'}</span> ${cp.trade} @ ₹${cp.entry_premium} (since ${cp.entry_time})`;
+            } else {
+                posBar.style.display = 'none';
+            }
+        }
+
         // ── Init ────────────────────────────────────
         document.addEventListener('DOMContentLoaded', () => {
             if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
@@ -2623,9 +2872,45 @@
             setInterval(updateMarketStatus, 30000);
             setInterval(updateClock, 1000);
             fetchData();
-            setInterval(fetchData, 60000);
+
+            // ── Smart Auto-Refresh (#7) ──────────────────────
+            // 30s during market open, 60s pre-market, 120s post-market, 300s closed
+            let smartRefreshTimer = null;
+            function startSmartRefresh() {
+                if (smartRefreshTimer) clearInterval(smartRefreshTimer);
+                const status = computeMarketStatus();
+                let interval;
+                if (status === 'live')     interval = 30000;   // 30s during market
+                else if (status === 'pre') interval = 60000;   // 60s pre-market
+                else                       interval = 300000;  // 5min after hours
+                smartRefreshTimer = setInterval(fetchData, interval);
+            }
+            startSmartRefresh();
+            // Re-evaluate refresh rate every 30 seconds
+            setInterval(startSmartRefresh, 30000);
+
             // Fetch backtest after a short delay (non-blocking)
             setTimeout(fetchBacktest, 5000);
+            // Restore saved sheet URL
+            const savedUrl = localStorage.getItem('logger_sheet_url');
+            if (savedUrl) {
+                document.getElementById('loggerSheetUrl').value = savedUrl;
+            }
+            // Check if logger is already running (after page refresh)
+            setTimeout(async () => {
+                try {
+                    const res = await fetch(`${API_BASE}/api/logger/status`);
+                    const data = await res.json();
+                    if (data.running) {
+                        loggerRunning = true;
+                        const btn = document.getElementById('loggerStartBtn');
+                        btn.textContent = '■ Stop';
+                        btn.className = 'logger-btn stop';
+                        updateLoggerUI(data);
+                        loggerPollInterval = setInterval(pollLoggerStatus, 10000);
+                    }
+                } catch(e) {}
+            }, 2000);
         });
     </script>
 </body>
