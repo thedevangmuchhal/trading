@@ -2246,8 +2246,10 @@
         }
 
         async function executePaperTrade(optionType) {
-            if (!cachedSignalData) return;
-            const data = cachedSignalData;
+            // Prefer the ultra-fast live tick data, fallback to cached 60s signal data
+            const data = window.latestLiveTick || cachedSignalData;
+            if (!data) return;
+            
             const lotSize = parseInt(document.getElementById('lotSizeInput').value) || 25;
             const strike = data.atm_strike || (Math.round(data.current_price / 100) * 100);
             const entryPrice = optionType === 'CE' ? (data.atm_ce_ltp || 0) : (data.atm_pe_ltp || 0);
@@ -2907,9 +2909,11 @@
         // SSE LIVE TICK STREAM — updates prices without page refresh
         // ═══════════════════════════════════════════
         let liveTickSource = null;
+        window.latestLiveTick = null;
 
         function applyLiveTick(tick) {
             if (tick.error) { console.warn('Tick error:', tick.error); return; }
+            window.latestLiveTick = tick;
 
             // ── Spot Price (header) ──
             if (tick.current_price > 0) {
