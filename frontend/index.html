@@ -2437,9 +2437,10 @@
                 document.getElementById('headerSymbol').textContent = symbolMap[currentTicker] || currentTicker;
                 document.getElementById('headerPrice').textContent = data.current_price;
 
-                if (candleData.candles && candleData.candles.length > 1) {
-                    const firstClose = candleData.candles[0].close;
-                    const change = ((data.current_price - firstClose) / firstClose * 100).toFixed(2);
+                if (data.pdc && data.pdc > 0) {
+                    window.globalPdc = data.pdc;
+                    const prevClose = data.pdc;
+                    const change = ((data.current_price - prevClose) / prevClose * 100).toFixed(2);
                     const changeEl = document.getElementById('headerChange');
                     changeEl.textContent = (change >= 0 ? '+' : '') + change + '%';
                     changeEl.className = 'header-change ' + (change >= 0 ? 'up' : 'down');
@@ -2915,6 +2916,13 @@
                 const priceEl = document.getElementById('headerPrice');
                 const oldPrice = parseFloat(priceEl.textContent) || 0;
                 priceEl.textContent = tick.current_price;
+
+                if (window.globalPdc && window.globalPdc > 0) {
+                    const change = ((tick.current_price - window.globalPdc) / window.globalPdc * 100).toFixed(2);
+                    const changeEl = document.getElementById('headerChange');
+                    changeEl.textContent = (change >= 0 ? '+' : '') + change + '%';
+                    changeEl.className = 'header-change ' + (change >= 0 ? 'up' : 'down');
+                }
 
                 // Flash green/red on price change
                 if (oldPrice > 0 && tick.current_price !== oldPrice) {
