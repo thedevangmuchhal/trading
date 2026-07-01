@@ -1061,6 +1061,7 @@ def generate_signals(ticker="^NSEI"):
         "fibonacci":        fibonacci,
         "pdh":              pdh,
         "pdl":              pdl,
+        "pdc":              pdc,
         "weekly_high":      weekly_high,
         "weekly_low":       weekly_low,
         "camarilla":        camarilla,
