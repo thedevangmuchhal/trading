@@ -22,9 +22,26 @@ app.add_middleware(
 )
 
 # ─────────────────────────────────────────────────────────────────────────────
-# PAPER TRADING — In-memory store (resets on server restart)
-# ─────────────────────────────────────────────────────────────────────────────
-paper_trades: list[dict] = []
+# PAPER TRADING - Persistent Store
+# 
+PAPER_TRADES_FILE = "paper_trades.json"
+import os
+import json
+
+def _load_paper_trades():
+    if os.path.exists(PAPER_TRADES_FILE):
+        try:
+            with open(PAPER_TRADES_FILE, 'r') as f:
+                return json.load(f)
+        except Exception:
+            pass
+    return []
+
+def _save_paper_trades():
+    with open(PAPER_TRADES_FILE, 'w') as f:
+        json.dump(paper_trades, f)
+
+paper_trades: list[dict] = _load_paper_trades()
 
 class PaperTradeRequest(BaseModel):
     ticker: str = "^NSEI"
@@ -353,6 +370,7 @@ def create_paper_trade(trade: PaperTradeRequest):
         "strategy_type": trade.strategy_type,
     }
     paper_trades.append(trade_obj)
+    _save_paper_trades()
     return trade_obj
 
 @app.get("/api/paper-trades")
@@ -403,6 +421,18 @@ def update_paper_trade(trade_id: str, current_price: float = 0):
                 diff = trade["trailing_sl"] - entry
                 trade["pnl"] = round(diff * trade["lot_size"], 2)
 
+            # Hit SL or Target? -> Auto Close
+            if (trade["stop_loss"] > 0 and current_price <= trade["stop_loss"] and trade["option_type"] == "CE") or \
+               (trade["target"] > 0 and current_price >= trade["target"] and trade["option_type"] == "CE"):
+                trade["status"] = "CLOSED"
+                trade["closed_at"] = datetime.now().isoformat()
+                
+            elif (trade["stop_loss"] > 0 and current_price >= trade["stop_loss"] and trade["option_type"] == "PE") or \
+                 (trade["target"] > 0 and current_price <= trade["target"] and trade["option_type"] == "PE"):
+                trade["status"] = "CLOSED"
+                trade["closed_at"] = datetime.now().isoformat()
+            
+            _save_paper_trades()
             return trade
     raise HTTPException(status_code=404, detail="Trade not found or already closed")
 
@@ -418,6 +448,7 @@ def close_paper_trade(trade_id: str, close_price: float = 0):
             # P&L = (current - entry) * lot_size for BUY
             diff = trade["current_price"] - trade["entry_price"]
             trade["pnl"] = round(diff * trade["lot_size"], 2)
+            _save_paper_trades()
             return trade
     raise HTTPException(status_code=404, detail="Trade not found or already closed")
 
