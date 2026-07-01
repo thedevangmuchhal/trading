@@ -1,9 +1,11 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from ai_engine import generate_signals
-from data_fetcher import fetch_market_data, get_angel_session
+from data_fetcher import fetch_market_data, get_angel_session, fetch_advanced_oi
 import json
+import asyncio
 import uuid
 from datetime import datetime
 from typing import Optional
@@ -146,6 +148,84 @@ def get_signal(ticker: str = "^NSEI"):
     }
 
     return data
+
+# ─────────────────────────────────────────────────────────────────────────────
+# SSE LIVE TICK STREAM — pushes spot + option LTPs every 2 seconds
+# ─────────────────────────────────────────────────────────────────────────────
+# Cache the last full signal so ticks can merge into it
+_last_full_signal: dict = {}
+
+@app.get("/api/live-tick")
+async def live_tick_stream(ticker: str = "^NSEI"):
+    """
+    Server-Sent Events endpoint.  Pushes a JSON tick every ~2 seconds with
+    live spot price, ATM CE/PE LTPs, all strike LTPs, and OI snapshot.
+    The frontend connects once with EventSource — no polling, no refresh.
+    """
+    async def event_generator():
+        global _last_full_signal
+        base_symbol = "NIFTY"
+        if ticker == "^NSEI":       base_symbol = "NIFTY"
+        elif ticker == "^NSEBANK":  base_symbol = "BANKNIFTY"
+        elif ticker == "^BSESN":    base_symbol = "SENSEX"
+
+        while True:
+            try:
+                session = get_angel_session()
+                if not session:
+                    yield f"data: {json.dumps({'error': 'No Angel session'})}\n\n"
+                    await asyncio.sleep(5)
+                    continue
+
+                # 1) Fetch live spot from Angel (token 26000 = NIFTY)
+                spot_token = "26000"
+                if base_symbol == "BANKNIFTY": spot_token = "26009"
+                elif base_symbol == "SENSEX":  spot_token = "26001"
+
+                spot_res = session.getMarketData("LTP", {"NSE": [spot_token]})
+                spot_price = 0
+                if spot_res and spot_res.get("data", {}).get("fetched"):
+                    spot_price = spot_res["data"]["fetched"][0].get("ltp", 0)
+
+                # 2) Fetch live OI + LTPs for all strikes (uses 15s cache internally)
+                oi_metrics = None
+                if spot_price > 0:
+                    oi_metrics = fetch_advanced_oi(ticker, spot_price)
+
+                tick = {
+                    "type": "tick",
+                    "timestamp": datetime.now().isoformat(),
+                    "current_price": spot_price,
+                    "atm_strike": oi_metrics.get("atm_strike") if oi_metrics else None,
+                    "atm_ce_ltp": oi_metrics.get("atm_ce_ltp") if oi_metrics else None,
+                    "atm_pe_ltp": oi_metrics.get("atm_pe_ltp") if oi_metrics else None,
+                    "pcr": oi_metrics.get("pcr") if oi_metrics else None,
+                    "vpcr": oi_metrics.get("vpcr") if oi_metrics else None,
+                    "max_pain": oi_metrics.get("max_pain") if oi_metrics else None,
+                    "oi_data": oi_metrics.get("oi_data") if oi_metrics else [],
+                    "greeks": oi_metrics.get("greeks") if oi_metrics else None,
+                    "strike_greeks": oi_metrics.get("strike_greeks") if oi_metrics else {},
+                    "buildup": oi_metrics.get("buildup") if oi_metrics else None,
+                    "total_ce_vol": oi_metrics.get("total_ce_vol") if oi_metrics else None,
+                    "total_pe_vol": oi_metrics.get("total_pe_vol") if oi_metrics else None,
+                    "expiry": oi_metrics.get("expiry") if oi_metrics else None,
+                }
+                yield f"data: {json.dumps(tick)}\n\n"
+
+            except Exception as e:
+                yield f"data: {json.dumps({'error': str(e)})}\n\n"
+
+            await asyncio.sleep(2)  # Push every 2 seconds
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",  # Prevents nginx/proxy buffering
+        }
+    )
 
 @app.get("/api/signal-history")
 def get_signal_history():

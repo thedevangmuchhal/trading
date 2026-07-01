@@ -1,0 +1,33 @@
+# Environments
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Logs and Data
+backend/logs/
+*.json
+!backend/ScripMaster.json
+!nifty_tokens.json
+# Actually, let's just ignore the Angel token file that gets redownloaded daily
+angel_tokens.json
+ScripMaster.json
+
+# Test scripts
+test.py
+test_sse.py
+
+# Models
+# *.pkl (uncomment if you want to ignore model files, but we need it for prediction)
+
+# VSCode
+.vscode/

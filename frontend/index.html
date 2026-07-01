@@ -2298,13 +2298,20 @@
             }
         }
 
-        async function updateOpenPaperTrades(ceLtp, peLtp) {
+        async function updateOpenPaperTrades(data) {
             try {
                 // Find open trades
                 const openTrades = paperTrades.filter(t => t.status === 'OPEN');
                 if (openTrades.length > 0) {
                     const updatePromises = openTrades.map(trade => {
-                        const currentPrice = trade.option_type === 'CE' ? ceLtp : peLtp;
+                        let currentPrice = 0;
+                        if (data.strike_greeks && data.strike_greeks[trade.strike]) {
+                            const sg = data.strike_greeks[trade.strike];
+                            currentPrice = trade.option_type === 'CE' ? sg.ce_ltp : sg.pe_ltp;
+                        } else {
+                            // Fallback if strike is out of bounds
+                            currentPrice = trade.option_type === 'CE' ? data.atm_ce_ltp : data.atm_pe_ltp;
+                        }
                         if (currentPrice > 0) {
                             return fetch(`${API_BASE}/api/paper-trade/${trade.id}/update?current_price=${currentPrice}`, {
                                 method: 'POST'
@@ -2731,7 +2738,7 @@
                 document.getElementById('content').style.display = 'block';
 
                 // ── Refresh paper trades ──
-                updateOpenPaperTrades(ceLtp, peLtp);
+                updateOpenPaperTrades(data);
 
                 // ── Notifications ──
                 if (data.action !== "WAIT" && data.action !== lastAction) {
@@ -2895,6 +2902,138 @@
             }
         }
 
+        // ═══════════════════════════════════════════
+        // SSE LIVE TICK STREAM — updates prices without page refresh
+        // ═══════════════════════════════════════════
+        let liveTickSource = null;
+
+        function applyLiveTick(tick) {
+            if (tick.error) { console.warn('Tick error:', tick.error); return; }
+
+            // ── Spot Price (header) ──
+            if (tick.current_price > 0) {
+                const priceEl = document.getElementById('headerPrice');
+                const oldPrice = parseFloat(priceEl.textContent) || 0;
+                priceEl.textContent = tick.current_price;
+
+                // Flash green/red on price change
+                if (oldPrice > 0 && tick.current_price !== oldPrice) {
+                    priceEl.style.transition = 'color 0.15s';
+                    priceEl.style.color = tick.current_price > oldPrice ? 'var(--bull)' : 'var(--bear)';
+                    setTimeout(() => { priceEl.style.color = ''; }, 600);
+                }
+            }
+
+            // ── ATM Strike ──
+            if (tick.atm_strike) {
+                document.getElementById('paperAtmStrike').textContent = tick.atm_strike;
+            }
+
+            // ── ATM CE/PE LTP ──
+            const ceLtp = tick.atm_ce_ltp || 0;
+            const peLtp = tick.atm_pe_ltp || 0;
+            document.getElementById('atmCeLtp').innerText  = ceLtp > 0 ? '₹' + parseFloat(ceLtp).toFixed(2) : '--';
+            document.getElementById('atmPeLtp').innerText  = peLtp > 0 ? '₹' + parseFloat(peLtp).toFixed(2) : '--';
+            document.getElementById('buyCePrice').textContent = ceLtp > 0 ? '₹' + parseFloat(ceLtp).toFixed(2) : '₹ --';
+            document.getElementById('buyPePrice').textContent = peLtp > 0 ? '₹' + parseFloat(peLtp).toFixed(2) : '₹ --';
+            document.getElementById('buyCeBtn').disabled = !(ceLtp > 0);
+            document.getElementById('buyPeBtn').disabled = !(peLtp > 0);
+
+            // ── PCR ──
+            const pcrElem = document.getElementById('pcrVal');
+            if (tick.pcr !== null && tick.pcr !== undefined) {
+                const volPcr = tick.vpcr !== null && tick.vpcr !== undefined ? tick.vpcr : '--';
+                pcrElem.innerText = `${tick.pcr} / ${volPcr}`;
+                pcrElem.className = 'stat-value ' + (tick.pcr > 1.2 ? 'bullish' : tick.pcr < 0.8 ? 'bearish' : '');
+            }
+
+            // ── Max Pain ──
+            if (tick.max_pain) document.getElementById('maxPainVal').innerText = tick.max_pain;
+
+            // ── Expiry ──
+            if (tick.expiry) document.getElementById('expiryVal').innerText = tick.expiry;
+
+            // ── OI Buildup ──
+            const buildupElem = document.getElementById('buildupVal');
+            if (tick.buildup) {
+                const ceChg = tick.buildup.ce_change || 0;
+                const peChg = tick.buildup.pe_change || 0;
+                if (peChg > ceChg * 1.2) {
+                    buildupElem.innerText = 'Put Writing ↑';
+                    buildupElem.className = 'stat-value bullish';
+                } else if (ceChg > peChg * 1.2) {
+                    buildupElem.innerText = 'Call Writing ↑';
+                    buildupElem.className = 'stat-value bearish';
+                } else {
+                    buildupElem.innerText = 'Balanced';
+                    buildupElem.className = 'stat-value';
+                }
+            }
+
+            // ── Opt Volume ──
+            if (tick.total_ce_vol && tick.total_pe_vol) {
+                const optVolElem = document.getElementById('optVolVal');
+                const ceVol = tick.total_ce_vol;
+                const peVol = tick.total_pe_vol;
+                optVolElem.innerText = (ceVol / 1000000).toFixed(1) + 'M / ' + (peVol / 1000000).toFixed(1) + 'M';
+                optVolElem.className = 'stat-value ' + (peVol > ceVol * 1.1 ? 'bullish' : ceVol > peVol * 1.1 ? 'bearish' : '');
+            }
+
+            // ── Greeks (IV, Delta) ──
+            if (tick.greeks) {
+                const deltaElem = document.getElementById('deltaVal');
+                const ivElem = document.getElementById('ivVal');
+                const ivSkewElem = document.getElementById('ivSkewVal');
+
+                deltaElem.innerText = `${tick.greeks.ce_delta} / ${tick.greeks.pe_delta}`;
+                deltaElem.className = 'stat-value ' + (Math.abs(tick.greeks.ce_delta) > Math.abs(tick.greeks.pe_delta) ? 'bullish' : 'bearish');
+
+                ivElem.innerText = `${tick.greeks.ce_iv}% / ${tick.greeks.pe_iv}%`;
+                ivElem.className = 'stat-value ' + (tick.greeks.ce_iv > tick.greeks.pe_iv * 1.1 ? 'bullish' : tick.greeks.pe_iv > tick.greeks.ce_iv * 1.1 ? 'bearish' : '');
+
+                const skew = (tick.greeks.ce_iv - tick.greeks.pe_iv).toFixed(1);
+                ivSkewElem.innerText = skew + '%';
+                ivSkewElem.className = 'stat-value ' + (skew > 2 ? 'bullish' : skew < -2 ? 'bearish' : '');
+            }
+
+            // ── OI Chart ──
+            if (tick.oi_data && tick.oi_data.length > 0) {
+                renderOIChart(tick.oi_data, tick.atm_strike);
+            }
+
+            // ── Paper Trades P&L (use strike_greeks for accurate per-strike pricing) ──
+            updateOpenPaperTrades(tick);
+
+            // ── Connection status ──
+            const statusEl = document.getElementById('connectionStatus');
+            statusEl.className = 'connection-status connected';
+            statusEl.innerHTML = '⚡ Live Stream · OI: Live';
+        }
+
+        function connectLiveTick() {
+            if (liveTickSource) { liveTickSource.close(); }
+            const url = `${API_BASE}/api/live-tick?ticker=${encodeURIComponent(currentTicker)}`;
+            liveTickSource = new EventSource(url);
+
+            liveTickSource.onmessage = (event) => {
+                try {
+                    const tick = JSON.parse(event.data);
+                    applyLiveTick(tick);
+                } catch (e) {
+                    console.error('Tick parse error:', e);
+                }
+            };
+
+            liveTickSource.onerror = (e) => {
+                console.warn('SSE connection lost. Reconnecting in 5s...');
+                const statusEl = document.getElementById('connectionStatus');
+                statusEl.className = 'connection-status disconnected';
+                statusEl.innerHTML = 'Stream disconnected — reconnecting…';
+                liveTickSource.close();
+                setTimeout(connectLiveTick, 5000);
+            };
+        }
+
         // ── Init ────────────────────────────────────
         document.addEventListener('DOMContentLoaded', () => {
             if ("Notification" in window && Notification.permission !== "granted" && Notification.permission !== "denied") {
@@ -2905,23 +3044,29 @@
             updateClock();
             setInterval(updateMarketStatus, 30000);
             setInterval(updateClock, 1000);
+
+            // Initial full fetch (AI signal + candles + technicals)
             fetchData();
 
-            // ── Smart Auto-Refresh (#7) ──────────────────────
-            // 30s during market open, 60s pre-market, 120s post-market, 300s closed
+            // Start SSE live tick stream (2s real-time updates)
+            setTimeout(connectLiveTick, 3000);
+
+            // ── Smart Auto-Refresh for FULL AI signal ──────────
+            // 60s during market, 120s pre-market, 300s closed
+            // (Tick data comes via SSE every 2s — this is just for the heavy AI engine)
             let smartRefreshTimer = null;
             function startSmartRefresh() {
                 if (smartRefreshTimer) clearInterval(smartRefreshTimer);
                 const status = computeMarketStatus();
                 let interval;
-                if (status === 'live')     interval = 30000;   // 30s during market
-                else if (status === 'pre') interval = 60000;   // 60s pre-market
+                if (status === 'live')     interval = 60000;   // 60s during market
+                else if (status === 'pre') interval = 120000;  // 2min pre-market
                 else                       interval = 300000;  // 5min after hours
                 smartRefreshTimer = setInterval(fetchData, interval);
             }
             startSmartRefresh();
-            // Re-evaluate refresh rate every 30 seconds
-            setInterval(startSmartRefresh, 30000);
+            // Re-evaluate refresh rate every 60 seconds
+            setInterval(startSmartRefresh, 60000);
 
             // Fetch backtest after a short delay (non-blocking)
             setTimeout(fetchBacktest, 5000);

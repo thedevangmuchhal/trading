@@ -1,4 +1,6 @@
 import os
+from dotenv import load_dotenv
+load_dotenv()
 import yfinance as yf
 import pandas as pd
 import pyotp
@@ -161,8 +163,9 @@ def get_filtered_angel_options(base_symbol):
                 urllib.request.urlretrieve(url, tmp_dl)
                 os.replace(tmp_dl, temp_path)
 
-            if not os.path.exists(temp_path):
+            if not os.path.exists(temp_path) or (time.time() - os.path.getmtime(temp_path)) > 86400:
                 download_tokens()
+
             
             def parse_tokens():
                 opts = []
